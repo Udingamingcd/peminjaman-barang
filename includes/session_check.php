@@ -1,12 +1,12 @@
 <?php
-// includes/session_check.php
 session_start();
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../login.php');
+// Cek session login
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+    header("Location: ../login.php");
     exit();
 }
 
-// Koneksi database
-require_once '../config/koneksi.php';
+// Load koneksi database
+require_once __DIR__ . '/../config/koneksi.php';
 ?>
