@@ -1,259 +1,233 @@
 <?php
-require_once 'includes/header.php';
-require_once 'includes/sidebar.php';
+session_start();
+require_once 'config/koneksi.php';
 
-// Query untuk statistik
-$query_stats = "
-    SELECT 
-        (SELECT COUNT(*) FROM barang) as total_barang,
-        (SELECT COUNT(*) FROM mahasiswa) as total_mahasiswa,
-        (SELECT COUNT(*) FROM peminjaman) as total_peminjaman,
-        (SELECT COUNT(*) FROM users) as total_users
-";
-$result_stats = mysqli_query($koneksi, $query_stats);
-$stats = mysqli_fetch_assoc($result_stats);
-
-// Query untuk status barang
-$query_status = "SELECT status, COUNT(*) as jumlah FROM barang GROUP BY status";
-$result_status = mysqli_query($koneksi, $query_status);
-$status_counts = [];
-while($row = mysqli_fetch_assoc($result_status)) {
-    $status_counts[$row['status']] = $row['jumlah'];
+// Cek apakah user sudah login, jika tidak redirect ke login
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit();
 }
 
-// Query untuk peminjaman aktif
-$query_peminjaman_aktif = "
-    SELECT p.*, m.nama as nama_mahasiswa, b.nama_barang, b.kode_barang
-    FROM peminjaman p
-    JOIN mahasiswa m ON p.mahasiswa_id = m.id
-    JOIN barang b ON p.barang_id = b.id
-    WHERE p.status = 'dipinjam'
-    ORDER BY p.tanggal_pinjam DESC
-    LIMIT 5
-";
-$result_peminjaman_aktif = mysqli_query($koneksi, $query_peminjaman_aktif);
+// Ambil data user dari session
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'];
+$nama_lengkap = $_SESSION['nama_lengkap'];
+$role = $_SESSION['role'];
 
-// Query untuk barang yang hampir habis (jika ada stok)
-$query_barang_populer = "
-    SELECT b.*, COUNT(p.id) as jumlah_pinjam
-    FROM barang b
-    LEFT JOIN peminjaman p ON b.id = p.barang_id
-    GROUP BY b.id
-    ORDER BY jumlah_pinjam DESC
-    LIMIT 5
-";
-$result_barang_populer = mysqli_query($koneksi, $query_barang_populer);
+// Tampilan berdasarkan role
+$role_display = ($role == 'superadmin') ? 'Super Admin' : 'Admin';
 ?>
 
-<!-- Main Content -->
-<div class="col-lg-10 col-md-9 main-content">
-    <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h3 class="mb-1">Dashboard</h3>
-            <p class="text-muted mb-0">Selamat datang, <?= $_SESSION['nama_lengkap'] ?>!</p>
-        </div>
-        <div>
-            <span class="badge bg-primary"><?= date('d F Y') ?></span>
-        </div>
-    </div>
-    
-    <!-- Stats Cards -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card stats-card tersedia">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted">Total Barang</h6>
-                            <h3 id="total-barang"><?= $stats['total_barang'] ?></h3>
-                        </div>
-                        <div class="icon-circle bg-primary">
-                            <i class="fas fa-box text-white"></i>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <span class="badge bg-primary"><?= $status_counts['tersedia'] ?? 0 ?> Tersedia</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-3">
-            <div class="card stats-card dipinjam">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted">Total Mahasiswa</h6>
-                            <h3 id="total-mahasiswa"><?= $stats['total_mahasiswa'] ?></h3>
-                        </div>
-                        <div class="icon-circle bg-warning">
-                            <i class="fas fa-user-graduate text-white"></i>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <span class="badge bg-warning">Peminjam Aktif</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-3">
-            <div class="card stats-card dikembalikan">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted">Total Peminjaman</h6>
-                            <h3 id="total-peminjaman"><?= $stats['total_peminjaman'] ?></h3>
-                        </div>
-                        <div class="icon-circle bg-success">
-                            <i class="fas fa-handshake text-white"></i>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <span class="badge bg-success">Aktif: <?= mysqli_num_rows($result_peminjaman_aktif) ?></span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-3">
-            <div class="card stats-card hilang">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted">Total Admin</h6>
-                            <h3 id="total-admin"><?= $stats['total_users'] ?></h3>
-                        </div>
-                        <div class="icon-circle bg-danger">
-                            <i class="fas fa-users text-white"></i>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <span class="badge bg-danger"><?= $_SESSION['role'] == 'superadmin' ? 'Superadmin' : 'Admin' ?></span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Charts and Tables -->
-    <div class="row">
-        <!-- Peminjaman Aktif -->
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-clock text-warning me-2"></i> Peminjaman Aktif
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <?php if(mysqli_num_rows($result_peminjaman_aktif) > 0): ?>
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Kode</th>
-                                    <th>Peminjam</th>
-                                    <th>Barang</th>
-                                    <th>Tanggal</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php while($row = mysqli_fetch_assoc($result_peminjaman_aktif)): ?>
-                                <tr>
-                                    <td><span class="badge bg-warning"><?= $row['kode_peminjaman'] ?></span></td>
-                                    <td><?= $row['nama_mahasiswa'] ?></td>
-                                    <td><?= $row['nama_barang'] ?></td>
-                                    <td><?= date('d/m/Y', strtotime($row['tanggal_pinjam'])) ?></td>
-                                </tr>
-                                <?php endwhile; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                    <?php else: ?>
-                    <div class="text-center py-4">
-                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
-                        <p class="text-muted">Tidak ada peminjaman aktif</p>
-                    </div>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Sistem Peminjaman Barang</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="dashboard.php">
+                <i class="fas fa-boxes"></i> Sistem Peminjaman Barang
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="dashboard.php">
+                            <i class="fas fa-home"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="barang.php">
+                            <i class="fas fa-box"></i> Data Barang
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="peminjaman.php">
+                            <i class="fas fa-hand-holding"></i> Peminjaman
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="pengembalian.php">
+                            <i class="fas fa-undo-alt"></i> Pengembalian
+                        </a>
+                    </li>
+                    <?php if ($role == 'superadmin'): ?>
+                    <li class="nav-item">
+                        <a class="nav-link" href="users.php">
+                            <i class="fas fa-users"></i> Manajemen User
+                        </a>
+                    </li>
                     <?php endif; ?>
-                </div>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user-circle"></i> <?= $nama_lengkap ?>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="profile.php">
+                                <i class="fas fa-user"></i> Profil Saya
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="logout.php">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </a></li>
+                        </ul>
+                    </li>
+                </ul>
             </div>
         </div>
-        
-        <!-- Barang Populer -->
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-star text-primary me-2"></i> Barang Paling Sering Dipinjam
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <?php if(mysqli_num_rows($result_barang_populer) > 0): ?>
-                    <div class="list-group">
-                        <?php while($row = mysqli_fetch_assoc($result_barang_populer)): ?>
-                        <div class="list-group-item border-0 px-0">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h6 class="mb-1"><?= $row['nama_barang'] ?></h6>
-                                    <small class="text-muted"><?= $row['kode_barang'] ?></small>
-                                </div>
-                                <span class="badge bg-primary rounded-pill"><?= $row['jumlah_pinjam'] ?>x</span>
-                            </div>
-                            <div class="progress mt-2" style="height: 5px;">
-                                <div class="progress-bar bg-primary" style="width: <?= min($row['jumlah_pinjam'] * 20, 100) ?>%"></div>
-                            </div>
-                        </div>
-                        <?php endwhile; ?>
-                    </div>
-                    <?php else: ?>
-                    <div class="text-center py-4">
-                        <i class="fas fa-info-circle fa-3x text-info mb-3"></i>
-                        <p class="text-muted">Belum ada data peminjaman</p>
-                    </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Quick Actions -->
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-bolt text-success me-2"></i> Akses Cepat
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-3 mb-3">
-                            <a href="peminjaman_manage.php?action=new" class="btn btn-primary w-100">
-                                <i class="fas fa-plus me-2"></i> Peminjaman Baru
-                            </a>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <a href="barang_manage.php?action=new" class="btn btn-success w-100">
-                                <i class="fas fa-box me-2"></i> Tambah Barang
-                            </a>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <a href="mahasiswa_manage.php?action=new" class="btn btn-info w-100">
-                                <i class="fas fa-user-plus me-2"></i> Tambah Mahasiswa
-                            </a>
-                        </div>
-                        <?php if ($_SESSION['role'] == 'superadmin'): ?>
-                        <div class="col-md-3 mb-3">
-                            <a href="admin_manage.php?action=new" class="btn btn-warning w-100">
-                                <i class="fas fa-user-cog me-2"></i> Tambah Admin
-                            </a>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+    </nav>
 
-<?php require_once 'includes/footer.php'; ?>
+    <!-- Main Content -->
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-md-12">
+                <!-- Welcome Card -->
+                <div class="card shadow mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">
+                            <i class="fas fa-tachometer-alt"></i> Dashboard
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <!-- User Info -->
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="alert alert-success">
+                                    <h5><i class="fas fa-user-check"></i> Selamat Datang, <?= $nama_lengkap ?>!</h5>
+                                    <p class="mb-0">
+                                        Anda login sebagai <strong><?= $role_display ?></strong> 
+                                        dengan username <strong><?= $username ?></strong>.
+                                        <span class="float-end">
+                                            <a href="logout.php" class="btn btn-sm btn-outline-danger">
+                                                <i class="fas fa-sign-out-alt"></i> Logout
+                                            </a>
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Statistik Dashboard -->
+                        <div class="row">
+                            <div class="col-md-3 mb-4">
+                                <div class="card text-white bg-info shadow">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h5 class="card-title">Total Barang</h5>
+                                                <h2 class="mb-0">15</h2>
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-box fa-3x"></i>
+                                            </div>
+                                        </div>
+                                        <a href="barang.php" class="text-white stretched-link"></a>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-3 mb-4">
+                                <div class="card text-white bg-warning shadow">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h5 class="card-title">Dipinjam</h5>
+                                                <h2 class="mb-0">3</h2>
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-hand-holding fa-3x"></i>
+                                            </div>
+                                        </div>
+                                        <a href="peminjaman.php" class="text-white stretched-link"></a>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-3 mb-4">
+                                <div class="card text-white bg-success shadow">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h5 class="card-title">Dikembalikan</h5>
+                                                <h2 class="mb-0">12</h2>
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-undo-alt fa-3x"></i>
+                                            </div>
+                                        </div>
+                                        <a href="pengembalian.php" class="text-white stretched-link"></a>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-3 mb-4">
+                                <div class="card text-white bg-secondary shadow">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h5 class="card-title">Total User</h5>
+                                                <h2 class="mb-0">5</h2>
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-users fa-3x"></i>
+                                            </div>
+                                        </div>
+                                        <?php if ($role == 'superadmin'): ?>
+                                        <a href="users.php" class="text-white stretched-link"></a>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tombol Logout Besar -->
+                        <div class="row mt-5">
+                            <div class="col-md-12 text-center">
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        <h5 class="mb-0">
+                                            <i class="fas fa-sign-out-alt"></i> Keluar dari Sistem
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="card-text">
+                                            Klik tombol di bawah untuk mengakhiri sesi Anda.
+                                            Setelah logout, Anda harus login kembali untuk mengakses sistem.
+                                        </p>
+                                        <a href="logout.php" class="btn btn-danger btn-lg">
+                                            <i class="fas fa-sign-out-alt"></i> Logout Sekarang
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer mt-auto py-3 bg-light border-top">
+        <div class="container text-center">
+            <span class="text-muted">
+                &copy; <?= date('Y') ?> Sistem Peminjaman Barang. Login sebagai: <strong><?= $role_display ?></strong>
+            </span>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/script.js"></script>
+</body>
+</html>
