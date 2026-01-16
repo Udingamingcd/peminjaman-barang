@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'config/koneksi.php';
+require_once 'config/koneksi.php'; // sekarang menggunakan $conn
 
 // Cek apakah sudah login, redirect ke dashboard
 if (isset($_SESSION['user_id'])) {
@@ -15,24 +15,26 @@ $superadmin_exists = mysqli_num_rows($check_superadmin) > 0;
 // Proses login
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+
     $username = mysqli_real_escape_string($koneksi, $_POST['username']);
     $password = $_POST['password'];
-    
+
     // Cari user di database
     $query = "SELECT * FROM users WHERE username = '$username'";
     $result = mysqli_query($koneksi, $query);
-    
+
     if (mysqli_num_rows($result) == 1) {
         $user = mysqli_fetch_assoc($result);
-        
+
         // Verifikasi password
         if (password_verify($password, $user['password'])) {
-            // Set session
+            
+            // Set Session
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['username'];
             $_SESSION['nama_lengkap'] = $user['nama_lengkap'];
             $_SESSION['role'] = $user['role'];
-            
+
             // Redirect ke dashboard
             header('Location: dashboard.php');
             exit();
@@ -45,13 +47,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 }
 ?>
 
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Sistem Peminjaman Barang</title>
-    <link rel="stylesheet" href="css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
@@ -112,6 +114,5 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
-    <script src="js/script.js"></script>
 </body>
 </html>

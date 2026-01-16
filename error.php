@@ -8,14 +8,19 @@ $error_messages = [
         'icon' => 'fas fa-ban'
     ],
     '404' => [
-        'title' => 'Halaman Tidak Ditemukan',
-        'message' => 'Halaman yang Anda cari tidak ditemukan atau telah dipindahkan.',
-        'icon' => 'fas fa-exclamation-circle'
+        'title' => 'Fitur Belum Tersedia',
+        'message' => 'Fitur yang Anda cari sedang dalam pengembangan. Silakan kembali lagi nanti.',
+        'icon' => 'fas fa-cogs'
     ],
     '500' => [
         'title' => 'Kesalahan Server',
         'message' => 'Terjadi kesalahan internal pada server. Silakan coba lagi nanti.',
         'icon' => 'fas fa-server'
+    ],
+    '503' => [
+        'title' => 'Dalam Pemeliharaan',
+        'message' => 'Sistem sedang dalam pemeliharaan untuk peningkatan fitur.',
+        'icon' => 'fas fa-tools'
     ]
 ];
 
@@ -54,6 +59,11 @@ $error = $error_messages[$error_code] ?? $error_messages['404'];
             margin-bottom: 20px;
         }
         
+        /* Warna khusus untuk status pengembangan */
+        .error-icon.development {
+            color: #ff9800;
+        }
+        
         .error-code {
             font-size: 72px;
             font-weight: 700;
@@ -71,6 +81,16 @@ $error = $error_messages[$error_code] ?? $error_messages['404'];
             color: #6c757d;
             font-size: 16px;
             margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        
+        .development-note {
+            background-color: #fff8e1;
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            margin-bottom: 25px;
+            text-align: left;
+            border-radius: 5px;
         }
         
         .btn-back {
@@ -89,16 +109,37 @@ $error = $error_messages[$error_code] ?? $error_messages['404'];
             color: white;
             text-decoration: none;
         }
+        
+        .btn-outline-warning {
+            border-color: #ff9800;
+            color: #ff9800;
+        }
+        
+        .btn-outline-warning:hover {
+            background-color: #ff9800;
+            color: white;
+        }
     </style>
 </head>
 <body>
     <div class="error-container">
-        <div class="error-icon">
+        <div class="error-icon <?= $error_code == '404' ? 'development' : '' ?>">
             <i class="<?= $error['icon'] ?>"></i>
         </div>
         <div class="error-code"><?= $error_code ?></div>
         <div class="error-title"><?= $error['title'] ?></div>
         <div class="error-message"><?= $error['message'] ?></div>
+        
+        <?php if($error_code == '404'): ?>
+        <div class="development-note">
+            <small>
+                <i class="fas fa-info-circle text-warning me-2"></i>
+                <strong>Status Pengembangan:</strong> Fitur ini sedang dalam tahap pengembangan aktif. 
+                Estimasi penyelesaian: <strong>2-3 minggu ke depan</strong>.
+            </small>
+        </div>
+        <?php endif; ?>
+        
         <div class="mt-4">
             <?php if(isset($_SESSION['user_id'])): ?>
                 <a href="dashboard.php" class="btn-back">
@@ -109,9 +150,16 @@ $error = $error_messages[$error_code] ?? $error_messages['404'];
                     <i class="fas fa-sign-in-alt me-2"></i>Kembali ke Login
                 </a>
             <?php endif; ?>
-            <a href="index.php" class="btn btn-outline-primary ms-2">
-                <i class="fas fa-home me-2"></i>Home
-            </a>
+            
+            <?php if($error_code == '404'): ?>
+                <a href="javascript:void(0)" class="btn btn-outline-warning ms-2" onclick="alert('Fitur ini akan segera tersedia!')">
+                    <i class="fas fa-bell me-2"></i>Notifikasi Saya
+                </a>
+            <?php else: ?>
+                <a href="index.php" class="btn btn-outline-primary ms-2">
+                    <i class="fas fa-home me-2"></i>Home
+                </a>
+            <?php endif; ?>
         </div>
         
         <?php if($error_code == '500'): ?>
@@ -126,6 +174,15 @@ $error = $error_messages[$error_code] ?? $error_messages['404'];
                     </small>
                 </div>
             </details>
+        </div>
+        <?php endif; ?>
+        
+        <?php if($error_code == '404'): ?>
+        <div class="mt-4 text-muted">
+            <small>
+                <i class="far fa-clock me-1"></i>
+                Terakhir diperbarui: <?= date('d/m/Y') ?>
+            </small>
         </div>
         <?php endif; ?>
     </div>

@@ -118,3 +118,54 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--secondary-color);
 }
+/* style.css - Tambahan untuk dashboard */
+
+/* Toast notifications */
+.toast-container {
+    z-index: 9999;
+}
+
+/* Print styles */
+@media print {
+    .navbar,
+    .footer,
+    .card-header .btn,
+    .quick-action-btn,
+    .stat-card:hover {
+        display: none !important;
+    }
+    
+    .stat-card {
+        border: 1px solid #dee2e6 !important;
+        box-shadow: none !important;
+    }
+    
+    body {
+        background: white !important;
+    }
+    
+    .container-fluid {
+        padding: 0 !important;
+    }
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+    .dashboard-wrapper {
+        background-color: #1a1d28;
+    }
+    
+    .card {
+        background-color: #2a2f3d;
+        border-color: #3a3f4d;
+    }
+    
+    .card-header {
+        background-color: #2a2f3d !important;
+        border-color: #3a3f4d;
+    }
+    
+    .text-muted {
+        color: #adb5bd !important;
+    }
+}
