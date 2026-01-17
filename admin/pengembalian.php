@@ -170,7 +170,7 @@ $stats = mysqli_fetch_assoc($stats_result);
 </head>
 <body>
     <!-- Sidebar -->
-    <?php include 'includes/sidebar.php'; ?>
+    <?php include 'sidebar.php'; ?>
     
     <!-- Main Content -->
     <div class="main-content">
@@ -291,10 +291,10 @@ $stats = mysqli_fetch_assoc($stats_result);
                                             <small class="text-muted">Kode: <?php echo $row['kode_barang']; ?></small>
                                         </td>
                                         <td>
-                                            <?php echo date('d/m/Y', strtotime($row['tanggal_pinjam'])); ?>
+                                            <?php echo !empty($row['tanggal_pinjam']) ? date('d/m/Y', strtotime($row['tanggal_pinjam'])) : '-'; ?>
                                         </td>
                                         <td>
-                                            <?php echo date('d/m/Y', strtotime($row['batas_kembali'])); ?>
+                                            <?php echo !empty($row['batas_kembali']) ? date('d/m/Y', strtotime($row['batas_kembali'])) : '-'; ?>
                                             <?php if ($is_overdue): ?>
                                             <br>
                                             <small class="text-danger">
@@ -424,11 +424,13 @@ $stats = mysqli_fetch_assoc($stats_result);
                     </div>
                     <div class="card-body">
                         <?php
+                        // Perbarui query untuk memastikan hanya mengambil data dengan tanggal_kembali tidak NULL
                         $riwayat_query = "SELECT p.*, m.nama as nama_mahasiswa, m.nim, b.nama_barang, b.kode_barang
                                           FROM peminjaman p 
                                           JOIN mahasiswa m ON p.mahasiswa_id = m.id
                                           JOIN barang b ON p.barang_id = b.id
                                           WHERE p.status IN ('dikembalikan', 'rusak', 'hilang', 'terlambat')
+                                          AND p.tanggal_kembali IS NOT NULL  -- Hanya ambil yang punya tanggal_kembali
                                           ORDER BY p.tanggal_kembali DESC 
                                           LIMIT 10";
                         $riwayat_result = mysqli_query($koneksi, $riwayat_query);
@@ -449,7 +451,14 @@ $stats = mysqli_fetch_assoc($stats_result);
                                 <tbody>
                                     <?php while($riwayat = mysqli_fetch_assoc($riwayat_result)): ?>
                                     <tr>
-                                        <td><?php echo date('d/m/Y', strtotime($riwayat['tanggal_kembali'])); ?></td>
+                                        <td>
+                                            <?php 
+                                            // Solusi: Gunakan ternary operator untuk mengecek apakah tanggal_kembali ada
+                                            echo !empty($riwayat['tanggal_kembali']) ? 
+                                                date('d/m/Y', strtotime($riwayat['tanggal_kembali'])) : 
+                                                '-';
+                                            ?>
+                                        </td>
                                         <td>
                                             <small class="text-muted"><?php echo $riwayat['kode_peminjaman']; ?></small>
                                         </td>

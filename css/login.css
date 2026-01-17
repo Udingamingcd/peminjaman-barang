@@ -124,13 +124,46 @@ body {
     gap: 0.75rem;
 }
 
-.logo-icon, .program-icon {
-    font-size: 2.5rem;
-    color: var(--primary-color);
+/* Styling untuk gambar logo */
+.logo-img, .program-img {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
     background: white;
-    padding: 0.75rem;
+    padding: 8px;
     border-radius: 10px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.logo-img:hover, .program-img:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.system-logo {
+    height: 40px;
+    vertical-align: middle;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* Fallback untuk logo jika gambar tidak tersedia */
+.logo-fallback, .program-fallback {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    padding: 8px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    font-size: 2rem;
+    color: var(--primary-color);
+}
+
+.logo-fallback i, .program-fallback i {
+    font-size: 2rem;
 }
 
 .logo-text h5, .program-text h5 {
@@ -150,6 +183,23 @@ body {
 .system-title p {
     font-size: 0.9rem;
     letter-spacing: 1px;
+}
+
+/* Animasi hover untuk logo */
+.logo-wrapper:hover .logo-img,
+.program-wrapper:hover .program-img,
+.logo-wrapper:hover .logo-fallback,
+.program-wrapper:hover .program-fallback {
+    animation: gentlePulse 2s infinite;
+}
+
+@keyframes gentlePulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.03);
+    }
 }
 
 /* Main Content */
@@ -438,9 +488,15 @@ body {
         margin-bottom: 0.5rem;
     }
     
-    .logo-icon, .program-icon {
-        font-size: 2rem;
-        padding: 0.5rem;
+    .logo-img, .program-img,
+    .logo-fallback, .program-fallback {
+        width: 50px;
+        height: 50px;
+        padding: 6px;
+    }
+    
+    .logo-fallback i, .program-fallback i {
+        font-size: 1.5rem;
     }
     
     .system-title h1 {
@@ -449,6 +505,10 @@ body {
     
     .system-title p {
         font-size: 0.8rem;
+    }
+    
+    .system-logo {
+        height: 30px;
     }
     
     .login-card {
@@ -492,4 +552,19 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--primary-color);
+}
+
+/* Tambahan untuk logo agar lebih responsif */
+@media (max-width: 576px) {
+    .logo-wrapper, .program-wrapper {
+        gap: 0.5rem;
+    }
+    
+    .logo-text h5, .program-text h5 {
+        font-size: 0.9rem;
+    }
+    
+    .logo-text small, .program-text small {
+        font-size: 0.7rem;
+    }
 }

@@ -168,7 +168,7 @@ $count_result = mysqli_query($koneksi, $count_query);
 $total_data = mysqli_fetch_assoc($count_result)['total'];
 $total_pages = ceil($total_data / $limit);
 
-// Ambil data peminjaman dengan join
+// Ambil data peminjaman dengan join (untuk tabel)
 $query = "SELECT p.*, m.nama as nama_mahasiswa, m.nim, b.nama_barang, b.kode_barang,
           u.nama_lengkap as admin_name
           FROM peminjaman p 
@@ -179,6 +179,9 @@ $query = "SELECT p.*, m.nama as nama_mahasiswa, m.nim, b.nama_barang, b.kode_bar
           ORDER BY p.created_at DESC 
           LIMIT $limit OFFSET $offset";
 $result = mysqli_query($koneksi, $query);
+
+// Simpan data untuk modal (duplikat result)
+$modal_result = mysqli_query($koneksi, $query);
 
 // Ambil statistik
 $stats_query = "SELECT 
@@ -217,10 +220,36 @@ $barang_result = mysqli_query($koneksi, $barang_query);
     <!-- Datepicker CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     
+    <!-- Select2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+    
     <!-- Custom CSS -->
     <link rel="stylesheet" href="../css/admin.css">
     
     <style>
+        .modal {
+            background-color: rgba(0,0,0,0.4);
+        }
+        
+        .modal.show {
+            display: block !important;
+            opacity: 1 !important;
+        }
+        
+        .modal-backdrop {
+            transition: opacity 0.15s linear;
+        }
+        
+        .modal.fade .modal-dialog {
+            transform: translate(0, 0);
+            transition: transform 0.3s ease-out;
+        }
+        
+        .modal.show .modal-dialog {
+            transform: none;
+        }
+        
         .timeline {
             position: relative;
             padding-left: 30px;
@@ -255,11 +284,28 @@ $barang_result = mysqli_query($koneksi, $barang_query);
             background: #e8f5e9;
             border-left: 4px solid #4caf50;
         }
+        
+        /* Fix untuk select2 dalam modal */
+        .select2-container--bootstrap-5 .select2-dropdown {
+            z-index: 1060 !important;
+        }
+        
+        /* Smooth modal animation */
+        .modal.fade .modal-dialog {
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+            transform: translate(0, -50px);
+            opacity: 0;
+        }
+        
+        .modal.show .modal-dialog {
+            transform: translate(0, 0);
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
     <!-- Sidebar -->
-    <?php include 'includes/sidebar.php'; ?>
+    <?php include 'sidebar.php'; ?>
     
     <!-- Main Content -->
     <div class="main-content">
@@ -360,7 +406,7 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                                 </select>
                             </div>
                             <div class="col-md-3">
-                                <input type="text" class="form-control datepicker" name="tanggal" 
+                                <input type="text" class="form-control datepicker-filter" name="tanggal" 
                                        placeholder="Pilih tanggal" 
                                        value="<?php echo htmlspecialchars($filter_tanggal); ?>">
                             </div>
@@ -463,8 +509,8 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                                         </td>
                                         <td>
                                             <div class="btn-group" role="group">
-                                                <button type="button" class="btn btn-sm btn-outline-primary"
-                                                        data-bs-toggle="modal" data-bs-target="#detailModal<?php echo $row['id']; ?>">
+                                                <button type="button" class="btn btn-sm btn-outline-primary btn-view-detail"
+                                                        data-id="<?php echo $row['id']; ?>">
                                                     <i class="fas fa-eye"></i>
                                                 </button>
                                                 
@@ -482,8 +528,8 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                                                             </a>
                                                         </li>
                                                         <li>
-                                                            <a class="dropdown-item text-warning" href="#" 
-                                                               data-bs-toggle="modal" data-bs-target="#perpanjangModal<?php echo $row['id']; ?>">
+                                                            <a class="dropdown-item text-warning btn-perpanjang" href="#" 
+                                                               data-id="<?php echo $row['id']; ?>">
                                                                 <i class="fas fa-calendar-plus me-2"></i>Perpanjang
                                                             </a>
                                                         </li>
@@ -498,162 +544,6 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                                                 </div>
                                                 <?php endif; ?>
                                             </div>
-                                            
-                                            <!-- Detail Modal -->
-                                            <div class="modal fade" id="detailModal<?php echo $row['id']; ?>" tabindex="-1">
-                                                <div class="modal-dialog modal-lg">
-                                                    <div class="modal-content">
-                                                        <div class="modal-header">
-                                                            <h5 class="modal-title">Detail Peminjaman</h5>
-                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                        </div>
-                                                        <div class="modal-body">
-                                                            <div class="row">
-                                                                <div class="col-md-6">
-                                                                    <h6>Informasi Peminjaman</h6>
-                                                                    <table class="table table-sm">
-                                                                        <tr>
-                                                                            <th width="40%">Kode Peminjaman</th>
-                                                                            <td><?php echo $row['kode_peminjaman']; ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>Tanggal Pinjam</th>
-                                                                            <td><?php echo date('d/m/Y', strtotime($row['tanggal_pinjam'])); ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>Batas Kembali</th>
-                                                                            <td><?php echo date('d/m/Y', strtotime($row['batas_kembali'])); ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>Admin</th>
-                                                                            <td><?php echo $row['admin_name']; ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>Status</th>
-                                                                            <td>
-                                                                                <span class="badge bg-<?php echo $status_class; ?>">
-                                                                                    <?php echo ucfirst($row['status']); ?>
-                                                                                </span>
-                                                                            </td>
-                                                                        </tr>
-                                                                    </table>
-                                                                </div>
-                                                                <div class="col-md-6">
-                                                                    <h6>Peminjam</h6>
-                                                                    <table class="table table-sm">
-                                                                        <tr>
-                                                                            <th width="40%">Nama</th>
-                                                                            <td><?php echo htmlspecialchars($row['nama_mahasiswa']); ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>NIM</th>
-                                                                            <td><?php echo $row['nim']; ?></td>
-                                                                        </tr>
-                                                                    </table>
-                                                                    
-                                                                    <h6 class="mt-3">Barang</h6>
-                                                                    <table class="table table-sm">
-                                                                        <tr>
-                                                                            <th width="40%">Nama Barang</th>
-                                                                            <td><?php echo htmlspecialchars($row['nama_barang']); ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>Kode Barang</th>
-                                                                            <td><?php echo $row['kode_barang']; ?></td>
-                                                                        </tr>
-                                                                    </table>
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <?php if ($row['foto_bukti_pinjam']): ?>
-                                                            <div class="mt-3">
-                                                                <h6>Bukti Peminjaman</h6>
-                                                                <img src="../assets/uploads/bukti_pinjam/<?php echo $row['foto_bukti_pinjam']; ?>" 
-                                                                     class="img-fluid rounded" style="max-height: 200px;">
-                                                            </div>
-                                                            <?php endif; ?>
-                                                            
-                                                            <?php if ($row['keterangan']): ?>
-                                                            <div class="mt-3">
-                                                                <h6>Keterangan</h6>
-                                                                <p><?php echo nl2br(htmlspecialchars($row['keterangan'])); ?></p>
-                                                            </div>
-                                                            <?php endif; ?>
-                                                            
-                                                            <!-- Riwayat Status -->
-                                                            <div class="mt-3">
-                                                                <h6>Riwayat Status</h6>
-                                                                <div class="timeline">
-                                                                    <?php
-                                                                    $riwayat_query = "SELECT * FROM riwayat_status 
-                                                                                     WHERE peminjaman_id = '{$row['id']}' 
-                                                                                     ORDER BY created_at DESC";
-                                                                    $riwayat_result = mysqli_query($koneksi, $riwayat_query);
-                                                                    while($riwayat = mysqli_fetch_assoc($riwayat_result)):
-                                                                    ?>
-                                                                    <div class="timeline-item">
-                                                                        <div class="timeline-dot"></div>
-                                                                        <div class="timeline-content">
-                                                                            <strong><?php echo ucfirst($riwayat['status_sesudah']); ?></strong>
-                                                                            <small class="text-muted d-block">
-                                                                                Dari: <?php echo $riwayat['status_sebelum'] ?: '-'; ?>
-                                                                            </small>
-                                                                            <small class="text-muted">
-                                                                                <?php echo date('d/m/Y H:i', strtotime($riwayat['created_at'])); ?>
-                                                                                - <?php echo $riwayat['keterangan']; ?>
-                                                                            </small>
-                                                                        </div>
-                                                                    </div>
-                                                                    <?php endwhile; ?>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
-                                                            <button class="btn btn-primary" onclick="printDetail(<?php echo $row['id']; ?>)">
-                                                                <i class="fas fa-print me-2"></i>Cetak
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            <!-- Perpanjang Modal -->
-                                            <?php if ($row['status'] == 'dipinjam'): ?>
-                                            <div class="modal fade" id="perpanjangModal<?php echo $row['id']; ?>" tabindex="-1">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <form method="POST" action="perpanjang_peminjaman.php">
-                                                            <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
-                                                            <div class="modal-header">
-                                                                <h5 class="modal-title">Perpanjang Peminjaman</h5>
-                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                            </div>
-                                                            <div class="modal-body">
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">Batas Kembali Saat Ini</label>
-                                                                    <input type="text" class="form-control" 
-                                                                           value="<?php echo date('d/m/Y', strtotime($row['batas_kembali'])); ?>" disabled>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">Batas Kembali Baru</label>
-                                                                    <input type="date" class="form-control" name="batas_kembali_baru" 
-                                                                           min="<?php echo date('Y-m-d'); ?>" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">Keterangan Perpanjangan</label>
-                                                                    <textarea class="form-control" name="keterangan" rows="3"></textarea>
-                                                                </div>
-                                                            </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                                                                <button type="submit" class="btn btn-primary">Simpan Perpanjangan</button>
-                                                            </div>
-                                                        </form>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                     <?php endwhile; ?>
@@ -709,21 +599,24 @@ $barang_result = mysqli_query($koneksi, $barang_query);
     </div>
     
     <!-- Add Peminjaman Modal -->
-    <div class="modal fade" id="addPeminjamanModal" tabindex="-1">
+    <div class="modal fade" id="addPeminjamanModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <form method="POST" action="" enctype="multipart/form-data" id="addPeminjamanForm">
                     <div class="modal-header">
                         <h5 class="modal-title">Tambah Peminjaman Baru</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Mahasiswa <span class="text-danger">*</span></label>
-                                <select class="form-select" name="mahasiswa_id" id="mahasiswaSelect" required>
+                                <select class="form-select select2-modal" name="mahasiswa_id" id="mahasiswaSelect" required>
                                     <option value="">Pilih Mahasiswa</option>
-                                    <?php while($mahasiswa = mysqli_fetch_assoc($mahasiswa_result)): ?>
+                                    <?php 
+                                    // Reset pointer result
+                                    mysqli_data_seek($mahasiswa_result, 0);
+                                    while($mahasiswa = mysqli_fetch_assoc($mahasiswa_result)): ?>
                                     <option value="<?php echo $mahasiswa['id']; ?>">
                                         <?php echo $mahasiswa['nim']; ?> - <?php echo htmlspecialchars($mahasiswa['nama']); ?>
                                     </option>
@@ -732,9 +625,12 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Barang <span class="text-danger">*</span></label>
-                                <select class="form-select" name="barang_id" id="barangSelect" required>
+                                <select class="form-select select2-modal" name="barang_id" id="barangSelect" required>
                                     <option value="">Pilih Barang</option>
-                                    <?php while($barang = mysqli_fetch_assoc($barang_result)): ?>
+                                    <?php 
+                                    // Reset pointer result
+                                    mysqli_data_seek($barang_result, 0);
+                                    while($barang = mysqli_fetch_assoc($barang_result)): ?>
                                     <option value="<?php echo $barang['id']; ?>">
                                         <?php echo $barang['kode_barang']; ?> - <?php echo htmlspecialchars($barang['nama_barang']); ?>
                                     </option>
@@ -774,6 +670,176 @@ $barang_result = mysqli_query($koneksi, $barang_query);
         </div>
     </div>
     
+    <!-- Modals for detail and perpanjang (generated dynamically) -->
+    <?php 
+    // Reset pointer untuk modal
+    mysqli_data_seek($modal_result, 0);
+    while($row = mysqli_fetch_assoc($modal_result)):
+        $status_class = '';
+        if($row['status'] == 'dipinjam') $status_class = 'warning';
+        if($row['status'] == 'dikembalikan') $status_class = 'success';
+        if($row['status'] == 'hilang') $status_class = 'danger';
+        if($row['status'] == 'terlambat') $status_class = 'danger';
+    ?>
+    
+    <!-- Detail Modal -->
+    <div class="modal fade" id="detailModal<?php echo $row['id']; ?>" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Detail Peminjaman</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Informasi Peminjaman</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <th width="40%">Kode Peminjaman</th>
+                                    <td><?php echo $row['kode_peminjaman']; ?></td>
+                                </tr>
+                                <tr>
+                                    <th>Tanggal Pinjam</th>
+                                    <td><?php echo date('d/m/Y', strtotime($row['tanggal_pinjam'])); ?></td>
+                                </tr>
+                                <tr>
+                                    <th>Batas Kembali</th>
+                                    <td><?php echo date('d/m/Y', strtotime($row['batas_kembali'])); ?></td>
+                                </tr>
+                                <tr>
+                                    <th>Admin</th>
+                                    <td><?php echo $row['admin_name']; ?></td>
+                                </tr>
+                                <tr>
+                                    <th>Status</th>
+                                    <td>
+                                        <span class="badge bg-<?php echo $status_class; ?>">
+                                            <?php echo ucfirst($row['status']); ?>
+                                        </span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Peminjam</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <th width="40%">Nama</th>
+                                    <td><?php echo htmlspecialchars($row['nama_mahasiswa']); ?></td>
+                                </tr>
+                                <tr>
+                                    <th>NIM</th>
+                                    <td><?php echo $row['nim']; ?></td>
+                                </tr>
+                            </table>
+                            
+                            <h6 class="mt-3">Barang</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <th width="40%">Nama Barang</th>
+                                    <td><?php echo htmlspecialchars($row['nama_barang']); ?></td>
+                                </tr>
+                                <tr>
+                                    <th>Kode Barang</th>
+                                    <td><?php echo $row['kode_barang']; ?></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <?php if ($row['foto_bukti_pinjam']): ?>
+                    <div class="mt-3">
+                        <h6>Bukti Peminjaman</h6>
+                        <img src="../assets/uploads/bukti_pinjam/<?php echo $row['foto_bukti_pinjam']; ?>" 
+                             class="img-fluid rounded" style="max-height: 200px;">
+                    </div>
+                    <?php endif; ?>
+                    
+                    <?php if ($row['keterangan']): ?>
+                    <div class="mt-3">
+                        <h6>Keterangan</h6>
+                        <p><?php echo nl2br(htmlspecialchars($row['keterangan'])); ?></p>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <!-- Riwayat Status -->
+                    <div class="mt-3">
+                        <h6>Riwayat Status</h6>
+                        <div class="timeline">
+                            <?php
+                            $riwayat_query = "SELECT * FROM riwayat_status 
+                                             WHERE peminjaman_id = '{$row['id']}' 
+                                             ORDER BY created_at DESC";
+                            $riwayat_result = mysqli_query($koneksi, $riwayat_query);
+                            while($riwayat = mysqli_fetch_assoc($riwayat_result)):
+                            ?>
+                            <div class="timeline-item">
+                                <div class="timeline-dot"></div>
+                                <div class="timeline-content">
+                                    <strong><?php echo ucfirst($riwayat['status_sesudah']); ?></strong>
+                                    <small class="text-muted d-block">
+                                        Dari: <?php echo $riwayat['status_sebelum'] ?: '-'; ?>
+                                    </small>
+                                    <small class="text-muted">
+                                        <?php echo date('d/m/Y H:i', strtotime($riwayat['created_at'])); ?>
+                                        - <?php echo $riwayat['keterangan']; ?>
+                                    </small>
+                                </div>
+                            </div>
+                            <?php endwhile; ?>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                    <button class="btn btn-primary" onclick="printDetail(<?php echo $row['id']; ?>)">
+                        <i class="fas fa-print me-2"></i>Cetak
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <?php if ($row['status'] == 'dipinjam'): ?>
+    <!-- Perpanjang Modal -->
+    <div class="modal fade" id="perpanjangModal<?php echo $row['id']; ?>" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="perpanjang_peminjaman.php">
+                    <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Perpanjang Peminjaman</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Batas Kembali Saat Ini</label>
+                            <input type="text" class="form-control" 
+                                   value="<?php echo date('d/m/Y', strtotime($row['batas_kembali'])); ?>" disabled>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Batas Kembali Baru</label>
+                            <input type="date" class="form-control" name="batas_kembali_baru" 
+                                   min="<?php echo date('Y-m-d'); ?>" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Keterangan Perpanjangan</label>
+                            <textarea class="form-control" name="keterangan" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-primary">Simpan Perpanjangan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+    
+    <?php endwhile; ?>
+    
     <!-- Bootstrap JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     
@@ -783,25 +849,91 @@ $barang_result = mysqli_query($koneksi, $barang_query);
     <!-- Datepicker JS -->
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     
-    <!-- Select2 (optional) -->
+    <!-- Select2 -->
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     
     <script>
-        // Initialize datepicker
-        flatpickr('.datepicker', {
-            dateFormat: 'Y-m-d',
-            allowInput: true
-        });
-        
-        // Initialize select2
+        // Initialize datepicker for filter
         $(document).ready(function() {
-            $('#mahasiswaSelect, #barangSelect').select2({
-                placeholder: "Pilih...",
-                allowClear: true
+            // Datepicker for filter
+            $('.datepicker-filter').flatpickr({
+                dateFormat: 'Y-m-d',
+                allowInput: true
+            });
+            
+            // Initialize Select2 for modal selects
+            function initSelect2ForModal() {
+                $('.select2-modal').select2({
+                    theme: 'bootstrap-5',
+                    dropdownParent: $('#addPeminjamanModal'),
+                    width: '100%'
+                });
+            }
+            
+            // Initialize Select2 when modal is shown
+            $('#addPeminjamanModal').on('show.bs.modal', function() {
+                setTimeout(initSelect2ForModal, 100);
+            });
+            
+            // Close Select2 dropdown when modal is hidden
+            $('#addPeminjamanModal').on('hide.bs.modal', function() {
+                $('.select2-modal').select2('close');
+            });
+            
+            // Handle detail modal button clicks
+            $('.btn-view-detail').click(function(e) {
+                e.preventDefault();
+                var id = $(this).data('id');
+                var modal = $('#detailModal' + id);
+                
+                // Close any open modals first
+                $('.modal').modal('hide');
+                
+                // Show the specific modal after a short delay
+                setTimeout(function() {
+                    modal.modal('show');
+                }, 150);
+            });
+            
+            // Handle perpanjang modal button clicks
+            $('.btn-perpanjang').click(function(e) {
+                e.preventDefault();
+                var id = $(this).data('id');
+                var modal = $('#perpanjangModal' + id);
+                
+                // Close any open modals first
+                $('.modal').modal('hide');
+                
+                // Show the specific modal after a short delay
+                setTimeout(function() {
+                    modal.modal('show');
+                }, 150);
+            });
+            
+            // Prevent modal backdrop issues
+            $(document).on('show.bs.modal', '.modal', function() {
+                var zIndex = 1040 + (10 * $('.modal:visible').length);
+                $(this).css('z-index', zIndex);
+                setTimeout(function() {
+                    $('.modal-backdrop').not('.modal-stack').css('z-index', zIndex - 1)
+                        .addClass('modal-stack');
+                }, 0);
+            });
+            
+            // Remove modal backdrop on hide
+            $(document).on('hidden.bs.modal', '.modal', function() {
+                $('.modal:visible').length && $(document.body).addClass('modal-open');
+            });
+            
+            // Fix for multiple backdrop issue
+            $(document).on('hidden.bs.modal', '.modal', function() {
+                if($('.modal.show').length > 0) {
+                    $('body').addClass('modal-open');
+                }
             });
         });
         
-        // Form validation
+        // Form validation for add peminjaman
         $('#addPeminjamanForm').on('submit', function(e) {
             var mahasiswa = $('#mahasiswaSelect').val();
             var barang = $('#barangSelect').val();
@@ -820,6 +952,8 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                 alert('Batas kembali harus setelah tanggal pinjam!');
                 return false;
             }
+            
+            return true;
         });
         
         // Auto-check overdue

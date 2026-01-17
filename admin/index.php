@@ -24,11 +24,11 @@ $result_stats = mysqli_query($koneksi, $query_stats);
 $stats = mysqli_fetch_assoc($result_stats);
 
 // Ambil data peminjaman terbaru
-$query_peminjaman = "SELECT p.*, m.nama as nama_mahasiswa, b.nama_barang 
+$query_peminjaman = "SELECT p.*, m.nama as nama_mahasiswa, b.nama_barang, b.kode_barang 
                      FROM peminjaman p
                      JOIN mahasiswa m ON p.mahasiswa_id = m.id
                      JOIN barang b ON p.barang_id = b.id
-                     ORDER BY p.created_at DESC LIMIT 5";
+                     ORDER BY p.created_at DESC LIMIT 10";
 $result_peminjaman = mysqli_query($koneksi, $query_peminjaman);
 ?>
 <!DOCTYPE html>
@@ -255,19 +255,29 @@ $result_peminjaman = mysqli_query($koneksi, $query_peminjaman);
                 <div class="row">
                     <div class="col-md-8">
                         <div class="card">
-                            <div class="card-header">
+                            <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5 class="mb-0"><i class="fas fa-history me-2"></i>Peminjaman Terbaru</h5>
+                                <div class="table-controls">
+                                    <button class="btn btn-sm btn-outline-secondary scroll-btn" id="scrollLeft">
+                                        <i class="fas fa-chevron-left"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary scroll-btn" id="scrollRight">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-hover">
+                                <div class="table-responsive" id="peminjamanTableContainer">
+                                    <table class="table table-hover" id="peminjamanTable">
                                         <thead>
                                             <tr>
                                                 <th>Kode</th>
                                                 <th>Mahasiswa</th>
                                                 <th>Barang</th>
                                                 <th>Tanggal Pinjam</th>
+                                                <th>Tanggal Kembali</th>
                                                 <th>Status</th>
+                                                <th>Aksi</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -275,23 +285,56 @@ $result_peminjaman = mysqli_query($koneksi, $query_peminjaman);
                                             <tr>
                                                 <td><span class="badge bg-secondary"><?php echo $row['kode_peminjaman']; ?></span></td>
                                                 <td><?php echo htmlspecialchars($row['nama_mahasiswa']); ?></td>
-                                                <td><?php echo htmlspecialchars($row['nama_barang']); ?></td>
+                                                <td>
+                                                    <div class="d-flex align-items-center">
+                                                        <div class="me-2">
+                                                            <i class="fas fa-box text-primary"></i>
+                                                        </div>
+                                                        <div>
+                                                            <small class="text-muted d-block"><?php echo $row['kode_barang']; ?></small>
+                                                            <?php echo htmlspecialchars($row['nama_barang']); ?>
+                                                        </div>
+                                                    </div>
+                                                </td>
                                                 <td><?php echo date('d/m/Y', strtotime($row['tanggal_pinjam'])); ?></td>
+                                                <td>
+                                                    <?php if(isset($row['tanggal_kembali']) && !empty($row['tanggal_kembali'])): ?>
+                                                        <?php echo date('d/m/Y', strtotime($row['tanggal_kembali'])); ?>
+                                                    <?php else: ?>
+                                                        <span class="text-muted">-</span>
+                                                    <?php endif; ?>
+                                                </td>
                                                 <td>
                                                     <?php 
                                                     $status_class = '';
                                                     if($row['status'] == 'dipinjam') $status_class = 'warning';
                                                     if($row['status'] == 'dikembalikan') $status_class = 'success';
                                                     if($row['status'] == 'hilang') $status_class = 'danger';
+                                                    if($row['status'] == 'rusak') $status_class = 'danger';
+                                                    if($row['status'] == 'terlambat') $status_class = 'danger';
                                                     ?>
                                                     <span class="badge bg-<?php echo $status_class; ?>">
                                                         <?php echo ucfirst($row['status']); ?>
                                                     </span>
                                                 </td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-primary view-detail" 
+                                                            data-id="<?php echo $row['id']; ?>"
+                                                            data-bs-toggle="tooltip" 
+                                                            title="Lihat Detail">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                </td>
                                             </tr>
                                             <?php endwhile; ?>
                                         </tbody>
                                     </table>
+                                </div>
+                                <div class="mt-3 text-center">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        Gunakan tombol panah atau geser tabel untuk melihat data lengkap
+                                    </small>
                                 </div>
                             </div>
                         </div>

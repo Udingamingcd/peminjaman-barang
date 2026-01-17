@@ -119,6 +119,12 @@ $total_pages = ceil($total_data / $limit);
 $query = "SELECT * FROM mahasiswa ORDER BY angkatan DESC, nama ASC LIMIT $limit OFFSET $offset";
 $result = mysqli_query($koneksi, $query);
 
+// Simpan data mahasiswa untuk modal
+$mahasiswa_data = [];
+while($row = mysqli_fetch_assoc($result)) {
+    $mahasiswa_data[$row['id']] = $row;
+}
+
 // Ambil statistik
 $stats_query = "SELECT 
     COUNT(*) as total,
@@ -127,6 +133,22 @@ $stats_query = "SELECT
     FROM mahasiswa";
 $stats_result = mysqli_query($koneksi, $stats_query);
 $stats = mysqli_fetch_assoc($stats_result);
+
+// Query status peminjaman untuk semua mahasiswa sekaligus
+$mahasiswa_ids = array_keys($mahasiswa_data);
+$status_peminjaman = [];
+
+if (!empty($mahasiswa_ids)) {
+    $ids_string = implode(',', $mahasiswa_ids);
+    $status_query = "SELECT mahasiswa_id, COUNT(*) as total FROM peminjaman 
+                    WHERE mahasiswa_id IN ($ids_string) AND status = 'dipinjam' 
+                    GROUP BY mahasiswa_id";
+    $status_result = mysqli_query($koneksi, $status_query);
+    
+    while($row = mysqli_fetch_assoc($status_result)) {
+        $status_peminjaman[$row['mahasiswa_id']] = $row['total'] > 0;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -147,10 +169,248 @@ $stats = mysqli_fetch_assoc($stats_result);
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="../css/admin.css">
+    
+    <style>
+        /* Container tabel mahasiswa */
+        .table-scroll-container {
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 5px;
+            position: relative;
+            border-radius: 0.375rem;
+            background: white;
+        }
+
+        #mahasiswaTable {
+            min-width: 900px;
+            margin-bottom: 0;
+        }
+
+        .scroll-btn {
+            transition: all 0.3s ease;
+            padding: 0.25rem 0.5rem;
+        }
+
+        .scroll-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .scroll-btn:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Custom scrollbar untuk tabel */
+        .table-scroll-container::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .table-scroll-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .table-scroll-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .table-scroll-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Responsif untuk mobile */
+        @media (max-width: 768px) {
+            #mahasiswaTable {
+                min-width: 1000px;
+            }
+            
+            .table-controls {
+                margin-top: 10px;
+                justify-content: flex-end;
+            }
+            
+            .scroll-btn {
+                padding: 0.375rem 0.75rem;
+            }
+        }
+
+        /* Animasi untuk baris tabel */
+        .table-hover tbody tr {
+            transition: all 0.2s ease;
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: rgba(0, 0, 0, 0.03);
+            transform: translateX(2px);
+        }
+
+        /* Avatar styling */
+        .avatar-sm {
+            width: 32px;
+            height: 32px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .avatar-lg {
+            width: 80px;
+            height: 80px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 32px;
+            margin: 0 auto;
+        }
+
+        /* Table header styling */
+        .table-scroll-header {
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        /* Status badge styling */
+        .badge {
+            font-size: 0.75em;
+            padding: 0.35em 0.65em;
+        }
+        
+        /* Perbaikan untuk modal agar tidak glitch */
+        .modal {
+            -webkit-overflow-scrolling: touch;
+            overflow-y: auto;
+        }
+        
+        .modal-open {
+            overflow: hidden;
+        }
+        
+        /* Animasi fade in untuk modal */
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .modal.fade .modal-dialog {
+            animation: modalFadeIn 0.3s ease-out;
+        }
+        
+        /* Loading spinner untuk modal */
+        .modal-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+        }
+        
+        .modal-loading .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Tombol aksi di tabel */
+        .btn-group .btn-sm {
+            padding: 0.25rem 0.5rem;
+        }
+        
+        /* Fix untuk modal backdrop */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-backdrop.show {
+            opacity: 0.5;
+        }
+        
+        /* Mencegah scroll body saat modal terbuka */
+        body.modal-open {
+            padding-right: 0 !important;
+            overflow: hidden;
+        }
+        
+        /* Modal content styling */
+        .modal-content {
+            border: none;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+        }
+        
+        .modal-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+        }
+        
+        .modal-footer {
+            border-top: 1px solid #dee2e6;
+            background-color: #f8f9fa;
+            border-bottom-left-radius: 10px;
+            border-bottom-right-radius: 10px;
+        }
+        
+        /* Table inside modal */
+        .modal-body table.table-sm tr th {
+            width: 35%;
+        }
+        
+        .modal-body table.table-sm tr td {
+            width: 65%;
+        }
+        
+        /* Input styling dalam modal */
+        .modal-body .form-control:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+        }
+        
+        /* Error state untuk form */
+        .form-control.is-invalid {
+            border-color: #dc3545;
+        }
+        
+        .invalid-feedback {
+            display: none;
+            color: #dc3545;
+            font-size: 0.875em;
+            margin-top: 0.25rem;
+        }
+        
+        .form-control.is-invalid ~ .invalid-feedback {
+            display: block;
+        }
+    </style>
 </head>
 <body>
     <!-- Sidebar -->
-    <?php include 'includes/sidebar.php'; ?>
+    <?php include 'sidebar.php'; ?>
     
     <!-- Main Content -->
     <div class="main-content">
@@ -261,34 +521,42 @@ $stats = mysqli_fetch_assoc($stats_result);
                     </div>
                 </div>
                 
-                <!-- Data Table -->
+                <!-- Data Table dengan Scroll Horizontal -->
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0"><i class="fas fa-list me-2"></i>Daftar Mahasiswa</h5>
+                        <div class="table-controls">
+                            <!-- Tombol Scroll Horizontal -->
+                            <div class="btn-group me-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary scroll-btn" id="mahasiswaScrollLeft">
+                                    <i class="fas fa-chevron-left"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-primary scroll-btn" id="mahasiswaScrollRight">
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-body">
-                        <div class="table-responsive">
+                        <!-- Container untuk scroll horizontal -->
+                        <div class="table-scroll-container" id="mahasiswaTableContainer">
                             <table id="mahasiswaTable" class="table table-hover">
-                                <thead>
+                                <thead class="table-scroll-header">
                                     <tr>
-                                        <th>No</th>
-                                        <th>NIM</th>
-                                        <th>Nama</th>
-                                        <th>Angkatan</th>
-                                        <th>Kontak</th>
-                                        <th>Status</th>
-                                        <th>Aksi</th>
+                                        <th width="50">No</th>
+                                        <th width="120">NIM</th>
+                                        <th width="200">Nama</th>
+                                        <th width="100">Angkatan</th>
+                                        <th width="250">Kontak</th>
+                                        <th width="150">Status</th>
+                                        <th width="200">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php 
                                     $no = $offset + 1;
-                                    while($row = mysqli_fetch_assoc($result)): 
-                                        // Cek status peminjaman
-                                        $status_query = "SELECT COUNT(*) as total FROM peminjaman WHERE mahasiswa_id = '{$row['id']}' AND status = 'dipinjam'";
-                                        $status_result = mysqli_query($koneksi, $status_query);
-                                        $status_data = mysqli_fetch_assoc($status_result);
-                                        $is_meminjam = $status_data['total'] > 0;
+                                    foreach ($mahasiswa_data as $id => $row): 
+                                        $is_meminjam = isset($status_peminjaman[$id]) ? $status_peminjaman[$id] : false;
                                     ?>
                                     <tr>
                                         <td><?php echo $no++; ?></td>
@@ -332,131 +600,23 @@ $stats = mysqli_fetch_assoc($stats_result);
                                         </td>
                                         <td>
                                             <div class="btn-group" role="group">
-                                                <button type="button" class="btn btn-sm btn-outline-primary" 
-                                                        data-bs-toggle="modal" data-bs-target="#viewModal<?php echo $row['id']; ?>">
+                                                <button type="button" class="btn btn-sm btn-outline-primary view-btn" 
+                                                        data-id="<?php echo $id; ?>">
                                                     <i class="fas fa-eye"></i>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-outline-warning"
-                                                        data-bs-toggle="modal" data-bs-target="#editModal<?php echo $row['id']; ?>">
+                                                <button type="button" class="btn btn-sm btn-outline-warning edit-btn"
+                                                        data-id="<?php echo $id; ?>">
                                                     <i class="fas fa-edit"></i>
                                                 </button>
-                                                <a href="?delete=<?php echo $row['id']; ?>" 
-                                                   class="btn btn-sm btn-outline-danger"
-                                                   onclick="return confirm('Apakah Anda yakin ingin menghapus mahasiswa ini?')">
+                                                <a href="?delete=<?php echo $id; ?>" 
+                                                   class="btn btn-sm btn-outline-danger delete-btn"
+                                                   onclick="return confirmDelete(this, '<?php echo htmlspecialchars(addslashes($row['nama'])); ?>')">
                                                     <i class="fas fa-trash"></i>
                                                 </a>
                                             </div>
-                                            
-                                            <!-- View Modal -->
-                                            <div class="modal fade" id="viewModal<?php echo $row['id']; ?>" tabindex="-1">
-                                                <div class="modal-dialog modal-lg">
-                                                    <div class="modal-content">
-                                                        <div class="modal-header">
-                                                            <h5 class="modal-title">Detail Mahasiswa</h5>
-                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                        </div>
-                                                        <div class="modal-body">
-                                                            <div class="row">
-                                                                <div class="col-md-4 text-center">
-                                                                    <div class="avatar-lg mb-3">
-                                                                        <?php echo strtoupper(substr($row['nama'], 0, 1)); ?>
-                                                                    </div>
-                                                                    <h5><?php echo htmlspecialchars($row['nama']); ?></h5>
-                                                                    <p class="text-muted"><?php echo $row['nim']; ?></p>
-                                                                </div>
-                                                                <div class="col-md-8">
-                                                                    <table class="table table-sm">
-                                                                        <tr>
-                                                                            <th width="30%">NIM</th>
-                                                                            <td><?php echo $row['nim']; ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>Nama Lengkap</th>
-                                                                            <td><?php echo htmlspecialchars($row['nama']); ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>Angkatan</th>
-                                                                            <td><?php echo $row['angkatan']; ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>No. HP</th>
-                                                                            <td><?php echo $row['no_hp']; ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>Email</th>
-                                                                            <td><?php echo htmlspecialchars($row['email']); ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>Alamat</th>
-                                                                            <td><?php echo htmlspecialchars($row['alamat']); ?></td>
-                                                                        </tr>
-                                                                        <tr>
-                                                                            <th>Tanggal Daftar</th>
-                                                                            <td><?php echo date('d/m/Y H:i', strtotime($row['created_at'])); ?></td>
-                                                                        </tr>
-                                                                    </table>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            <!-- Edit Modal -->
-                                            <div class="modal fade" id="editModal<?php echo $row['id']; ?>" tabindex="-1">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <form method="POST" action="">
-                                                            <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
-                                                            <div class="modal-header">
-                                                                <h5 class="modal-title">Edit Mahasiswa</h5>
-                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                            </div>
-                                                            <div class="modal-body">
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">NIM</label>
-                                                                    <input type="text" class="form-control" name="nim" 
-                                                                           value="<?php echo $row['nim']; ?>" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">Nama Lengkap</label>
-                                                                    <input type="text" class="form-control" name="nama" 
-                                                                           value="<?php echo htmlspecialchars($row['nama']); ?>" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">Angkatan</label>
-                                                                    <input type="number" class="form-control" name="angkatan" 
-                                                                           value="<?php echo $row['angkatan']; ?>" min="2000" max="2030" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">No. HP</label>
-                                                                    <input type="text" class="form-control" name="no_hp" 
-                                                                           value="<?php echo $row['no_hp']; ?>">
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">Email</label>
-                                                                    <input type="email" class="form-control" name="email" 
-                                                                           value="<?php echo htmlspecialchars($row['email']); ?>">
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label">Alamat</label>
-                                                                    <textarea class="form-control" name="alamat" rows="3"><?php echo htmlspecialchars($row['alamat']); ?></textarea>
-                                                                </div>
-                                                            </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                                                                <button type="submit" name="edit_mahasiswa" class="btn btn-primary">Simpan Perubahan</button>
-                                                            </div>
-                                                        </form>
-                                                    </div>
-                                                </div>
-                                            </div>
                                         </td>
                                     </tr>
-                                    <?php endwhile; ?>
+                                    <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
@@ -523,7 +683,7 @@ $stats = mysqli_fetch_assoc($stats_result);
     </div>
     
     <!-- Add Mahasiswa Modal -->
-    <div class="modal fade" id="addMahasiswaModal" tabindex="-1">
+    <div class="modal fade" id="addMahasiswaModal" tabindex="-1" data-bs-backdrop="static">
         <div class="modal-dialog">
             <div class="modal-content">
                 <form method="POST" action="" id="addMahasiswaForm">
@@ -535,29 +695,32 @@ $stats = mysqli_fetch_assoc($stats_result);
                         <div class="mb-3">
                             <label class="form-label">NIM <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" name="nim" required 
-                                   placeholder="Masukkan NIM mahasiswa">
+                                   placeholder="Masukkan NIM mahasiswa" maxlength="20">
+                            <div class="invalid-feedback">NIM wajib diisi (minimal 8 karakter)</div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Nama Lengkap <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" name="nama" required 
-                                   placeholder="Masukkan nama lengkap">
+                                   placeholder="Masukkan nama lengkap" maxlength="100">
+                            <div class="invalid-feedback">Nama wajib diisi</div>
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Angkatan <span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" name="angkatan" required 
                                        min="2000" max="2030" value="<?php echo date('Y'); ?>">
+                                <div class="invalid-feedback">Angkatan harus antara 2000-2030</div>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">No. HP</label>
                                 <input type="text" class="form-control" name="no_hp" 
-                                       placeholder="08xxxxxxxxxx">
+                                       placeholder="08xxxxxxxxxx" maxlength="15">
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Email</label>
                             <input type="email" class="form-control" name="email" 
-                                   placeholder="mahasiswa@email.com">
+                                   placeholder="mahasiswa@email.com" maxlength="100">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Alamat</label>
@@ -567,40 +730,78 @@ $stats = mysqli_fetch_assoc($stats_result);
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="add_mahasiswa" class="btn btn-primary">Tambah Mahasiswa</button>
+                        <button type="submit" name="add_mahasiswa" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Tambah Mahasiswa
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
     
-    <!-- Import Modal -->
-    <div class="modal fade" id="importModal" tabindex="-1">
+    <!-- View Modal -->
+    <div class="modal fade" id="viewModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Detail Mahasiswa</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="viewModalBody">
+                    <!-- Content akan diisi oleh JavaScript -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Edit Modal -->
+    <div class="modal fade" id="editModal" tabindex="-1" data-bs-backdrop="static">
         <div class="modal-dialog">
             <div class="modal-content">
-                <form method="POST" action="import_mahasiswa.php" enctype="multipart/form-data">
+                <form method="POST" action="" id="editForm">
+                    <input type="hidden" name="id" id="editId">
                     <div class="modal-header">
-                        <h5 class="modal-title">Import Data Mahasiswa</h5>
+                        <h5 class="modal-title">Edit Mahasiswa</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle me-2"></i>
-                            Format file harus Excel (.xlsx) dengan kolom: NIM, Nama, Angkatan, No_HP, Email, Alamat
+                        <div class="mb-3">
+                            <label class="form-label">NIM <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="nim" id="editNim" required>
+                            <div class="invalid-feedback">NIM wajib diisi (minimal 8 karakter)</div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Pilih File Excel</label>
-                            <input type="file" class="form-control" name="file" accept=".xlsx,.xls" required>
+                            <label class="form-label">Nama Lengkap <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="nama" id="editNama" required>
+                            <div class="invalid-feedback">Nama wajib diisi</div>
                         </div>
-                        <div class="text-center">
-                            <a href="template_mahasiswa.xlsx" class="btn btn-sm btn-outline-primary">
-                                <i class="fas fa-download me-2"></i>Download Template
-                            </a>
+                        <div class="mb-3">
+                            <label class="form-label">Angkatan <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" name="angkatan" id="editAngkatan" 
+                                   min="2000" max="2030" required>
+                            <div class="invalid-feedback">Angkatan harus antara 2000-2030</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">No. HP</label>
+                            <input type="text" class="form-control" name="no_hp" id="editNoHp">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" name="email" id="editEmail">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Alamat</label>
+                            <textarea class="form-control" name="alamat" id="editAlamat" rows="3"></textarea>
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" class="btn btn-primary">Import Data</button>
+                        <button type="submit" name="edit_mahasiswa" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Simpan Perubahan
+                        </button>
                     </div>
                 </form>
             </div>
@@ -617,11 +818,296 @@ $stats = mysqli_fetch_assoc($stats_result);
     <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
     
-    <!-- Custom JS -->
     <script>
+        // Simpan data mahasiswa untuk modal
+        var mahasiswaData = <?php echo json_encode($mahasiswa_data, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+        
+        // Fungsi untuk menginisialisasi scroll horizontal
+        function initializeMahasiswaScroll() {
+            const tableContainer = document.getElementById('mahasiswaTableContainer');
+            const scrollLeftBtn = document.getElementById('mahasiswaScrollLeft');
+            const scrollRightBtn = document.getElementById('mahasiswaScrollRight');
+            
+            if (tableContainer && scrollLeftBtn && scrollRightBtn) {
+                const scrollAmount = 300;
+                
+                // Scroll kiri
+                scrollLeftBtn.addEventListener('click', function() {
+                    tableContainer.scrollBy({
+                        left: -scrollAmount,
+                        behavior: 'smooth'
+                    });
+                    updateScrollButtons();
+                });
+                
+                // Scroll kanan
+                scrollRightBtn.addEventListener('click', function() {
+                    tableContainer.scrollBy({
+                        left: scrollAmount,
+                        behavior: 'smooth'
+                    });
+                    updateScrollButtons();
+                });
+                
+                // Update status tombol scroll
+                function updateScrollButtons() {
+                    const scrollLeft = tableContainer.scrollLeft;
+                    const maxScrollLeft = tableContainer.scrollWidth - tableContainer.clientWidth;
+                    
+                    if (scrollLeft <= 10) {
+                        scrollLeftBtn.style.opacity = '0.5';
+                        scrollLeftBtn.disabled = true;
+                    } else {
+                        scrollLeftBtn.style.opacity = '1';
+                        scrollLeftBtn.disabled = false;
+                    }
+                    
+                    if (scrollLeft >= maxScrollLeft - 10) {
+                        scrollRightBtn.style.opacity = '0.5';
+                        scrollRightBtn.disabled = true;
+                    } else {
+                        scrollRightBtn.style.opacity = '1';
+                        scrollRightBtn.disabled = false;
+                    }
+                }
+                
+                // Inisialisasi tombol
+                updateScrollButtons();
+                
+                // Update tombol saat scroll
+                tableContainer.addEventListener('scroll', updateScrollButtons);
+                
+                // Update tombol saat resize
+                window.addEventListener('resize', function() {
+                    setTimeout(updateScrollButtons, 100);
+                });
+                
+                // Support touch untuk mobile
+                let touchStartX = 0;
+                let touchEndX = 0;
+                
+                tableContainer.addEventListener('touchstart', function(e) {
+                    touchStartX = e.changedTouches[0].screenX;
+                }, {passive: true});
+                
+                tableContainer.addEventListener('touchend', function(e) {
+                    touchEndX = e.changedTouches[0].screenX;
+                    handleSwipe();
+                }, {passive: true});
+                
+                function handleSwipe() {
+                    const swipeThreshold = 50;
+                    const diff = touchStartX - touchEndX;
+                    
+                    if (Math.abs(diff) > swipeThreshold) {
+                        if (diff > 0) {
+                            // Swipe kiri
+                            tableContainer.scrollBy({
+                                left: scrollAmount,
+                                behavior: 'smooth'
+                            });
+                        } else {
+                            // Swipe kanan
+                            tableContainer.scrollBy({
+                                left: -scrollAmount,
+                                behavior: 'smooth'
+                            });
+                        }
+                        updateScrollButtons();
+                    }
+                }
+                
+                // Navigasi keyboard
+                document.addEventListener('keydown', function(e) {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                    
+                    if (e.key === 'ArrowLeft') {
+                        scrollLeftBtn.click();
+                        e.preventDefault();
+                    } else if (e.key === 'ArrowRight') {
+                        scrollRightBtn.click();
+                        e.preventDefault();
+                    }
+                });
+            }
+        }
+        
+        // Fungsi untuk menampilkan modal detail
+        function showViewModal(mahasiswaId) {
+            const data = mahasiswaData[mahasiswaId];
+            if (!data) {
+                alert('Data mahasiswa tidak ditemukan');
+                return;
+            }
+            
+            // Format tanggal
+            const createdAt = new Date(data.created_at);
+            const formattedDate = createdAt.toLocaleDateString('id-ID', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            const avatarLetter = data.nama.charAt(0).toUpperCase();
+            
+            // Buat konten modal
+            const modalContent = `
+                <div class="row">
+                    <div class="col-md-4 text-center mb-3 mb-md-0">
+                        <div class="avatar-lg mb-3">
+                            ${avatarLetter}
+                        </div>
+                        <h5 class="text-primary">${escapeHtml(data.nama)}</h5>
+                        <p class="text-muted">${data.nim}</p>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-borderless">
+                                <tr>
+                                    <th width="35%" class="text-muted">NIM</th>
+                                    <td class="fw-bold">${data.nim}</td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">Nama Lengkap</th>
+                                    <td>${escapeHtml(data.nama)}</td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">Angkatan</th>
+                                    <td><span class="badge bg-info">${data.angkatan}</span></td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">No. HP</th>
+                                    <td>${data.no_hp || '<span class="text-muted">-</span>'}</td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">Email</th>
+                                    <td>${escapeHtml(data.email) || '<span class="text-muted">-</span>'}</td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">Alamat</th>
+                                    <td>${escapeHtml(data.alamat) || '<span class="text-muted">-</span>'}</td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">Tanggal Daftar</th>
+                                    <td>${formattedDate}</td>
+                                </tr>
+                                <tr>
+                                    <th class="text-muted">Terakhir Diupdate</th>
+                                    <td>${data.updated_at ? new Date(data.updated_at).toLocaleDateString('id-ID') : '-'}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Tampilkan modal
+            const viewModalBody = document.getElementById('viewModalBody');
+            if (viewModalBody) {
+                viewModalBody.innerHTML = modalContent;
+                const viewModal = new bootstrap.Modal(document.getElementById('viewModal'));
+                viewModal.show();
+            }
+        }
+        
+        // Fungsi untuk menampilkan modal edit
+        function showEditModal(mahasiswaId) {
+            const data = mahasiswaData[mahasiswaId];
+            if (!data) {
+                alert('Data mahasiswa tidak ditemukan');
+                return;
+            }
+            
+            // Isi form dengan data
+            document.getElementById('editId').value = data.id;
+            document.getElementById('editNim').value = data.nim;
+            document.getElementById('editNama').value = data.nama;
+            document.getElementById('editAngkatan').value = data.angkatan;
+            document.getElementById('editNoHp').value = data.no_hp || '';
+            document.getElementById('editEmail').value = data.email || '';
+            document.getElementById('editAlamat').value = data.alamat || '';
+            
+            // Reset validasi
+            const form = document.getElementById('editForm');
+            const inputs = form.querySelectorAll('.form-control');
+            inputs.forEach(input => {
+                input.classList.remove('is-invalid');
+            });
+            
+            // Tampilkan modal
+            const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+            editModal.show();
+            
+            // Fokus ke input pertama
+            setTimeout(() => {
+                document.getElementById('editNim').focus();
+            }, 300);
+        }
+        
+        // Fungsi untuk konfirmasi hapus dengan sweet alert
+        function confirmDelete(element, nama) {
+            if (!confirm(`Apakah Anda yakin ingin menghapus mahasiswa "${nama}"?`)) {
+                return false;
+            }
+            
+            // Tampilkan loading
+            const originalText = element.innerHTML;
+            element.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            element.disabled = true;
+            
+            return true;
+        }
+        
+        // Fungsi untuk escape HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+        
+        // Fungsi untuk validasi form
+        function validateForm(form) {
+            let isValid = true;
+            const inputs = form.querySelectorAll('[required]');
+            
+            inputs.forEach(input => {
+                if (!input.value.trim()) {
+                    input.classList.add('is-invalid');
+                    isValid = false;
+                } else {
+                    input.classList.remove('is-invalid');
+                    
+                    // Validasi khusus
+                    if (input.name === 'nim' && input.value.length < 8) {
+                        input.classList.add('is-invalid');
+                        isValid = false;
+                    }
+                    
+                    if (input.name === 'angkatan') {
+                        const year = parseInt(input.value);
+                        if (year < 2000 || year > 2030) {
+                            input.classList.add('is-invalid');
+                            isValid = false;
+                        }
+                    }
+                }
+            });
+            
+            return isValid;
+        }
+        
+        // Inisialisasi saat halaman dimuat
         $(document).ready(function() {
-            // Initialize DataTable
-            $('#mahasiswaTable').DataTable({
+            // Inisialisasi DataTable
+            const dataTable = $('#mahasiswaTable').DataTable({
                 paging: false,
                 searching: false,
                 info: false,
@@ -631,19 +1117,40 @@ $stats = mysqli_fetch_assoc($stats_result);
                 }
             });
             
-            // Search functionality
+            // Inisialisasi scroll
+            initializeMahasiswaScroll();
+            
+            // Fitur pencarian
             $('#searchInput').on('keyup', function() {
-                var value = $(this).val().toLowerCase();
+                const value = $(this).val().toLowerCase();
                 $('#mahasiswaTable tbody tr').filter(function() {
                     $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
                 });
             });
             
-            // Filter by angkatan
+            // Filter berdasarkan angkatan
             $('#filterAngkatan').on('change', function() {
-                var value = $(this).val().toLowerCase();
+                const value = $(this).val().toLowerCase();
                 $('#mahasiswaTable tbody tr').filter(function() {
                     $(this).toggle($(this).find('td:eq(3)').text().toLowerCase().indexOf(value) > -1);
+                });
+            });
+            
+            // Filter berdasarkan status
+            $('#filterStatus').on('change', function() {
+                const value = $(this).val();
+                $('#mahasiswaTable tbody tr').filter(function() {
+                    if (!value) {
+                        $(this).show();
+                        return;
+                    }
+                    
+                    const statusText = $(this).find('td:eq(5)').text().toLowerCase();
+                    if (value === 'meminjam') {
+                        $(this).toggle(statusText.includes('sedang meminjam'));
+                    } else if (value === 'tidak_meminjam') {
+                        $(this).toggle(statusText.includes('tidak meminjam'));
+                    }
                 });
             });
             
@@ -655,29 +1162,90 @@ $stats = mysqli_fetch_assoc($stats_result);
                 $('#mahasiswaTable tbody tr').show();
             });
             
-            // Form validation
+            // Validasi form tambah
             $('#addMahasiswaForm').on('submit', function(e) {
-                var nim = $('input[name="nim"]').val();
-                var nama = $('input[name="nama"]').val();
-                var angkatan = $('input[name="angkatan"]').val();
-                
-                if (!nim || !nama || !angkatan) {
+                if (!validateForm(this)) {
                     e.preventDefault();
-                    alert('Mohon lengkapi semua field yang wajib diisi!');
                     return false;
                 }
-                
-                if (nim.length < 8) {
+            });
+            
+            // Validasi form edit
+            $('#editForm').on('submit', function(e) {
+                if (!validateForm(this)) {
                     e.preventDefault();
-                    alert('NIM harus minimal 8 karakter!');
                     return false;
                 }
-                
-                if (angkatan < 2000 || angkatan > 2030) {
-                    e.preventDefault();
-                    alert('Angkatan harus antara 2000-2030!');
-                    return false;
+            });
+            
+            // Event listener untuk tombol view
+            $(document).on('click', '.view-btn', function() {
+                const mahasiswaId = $(this).data('id');
+                showViewModal(mahasiswaId);
+            });
+            
+            // Event listener untuk tombol edit
+            $(document).on('click', '.edit-btn', function() {
+                const mahasiswaId = $(this).data('id');
+                showEditModal(mahasiswaId);
+            });
+            
+            // Event listener untuk modal hidden
+            $('#viewModal, #editModal, #addMahasiswaModal').on('hidden.bs.modal', function() {
+                // Reset form edit
+                if (this.id === 'editModal') {
+                    const form = document.getElementById('editForm');
+                    form.reset();
+                    const inputs = form.querySelectorAll('.form-control');
+                    inputs.forEach(input => {
+                        input.classList.remove('is-invalid');
+                    });
                 }
+            });
+            
+            // Auto-fokus pada input pencarian
+            $('#searchInput').focus();
+            
+            // Animasi baris tabel
+            $('#mahasiswaTable tbody tr').each(function(index) {
+                $(this).css('animation-delay', (index * 0.05) + 's');
+                $(this).addClass('fade-in');
+            });
+            
+            // Fix untuk modal backdrop
+            $(document).on('show.bs.modal', '.modal', function() {
+                // Tutup modal lain yang terbuka
+                $('.modal.show').modal('hide');
+                
+                // Atur z-index
+                const zIndex = 1040 + (10 * $('.modal:visible').length);
+                $(this).css('z-index', zIndex);
+                setTimeout(() => {
+                    $('.modal-backdrop').not('.modal-stack').css('z-index', zIndex - 1).addClass('modal-stack');
+                }, 0);
+            });
+            
+            // Handle modal hidden
+            $(document).on('hidden.bs.modal', '.modal', function() {
+                if ($('.modal.show').length > 0) {
+                    $('body').addClass('modal-open');
+                }
+            });
+            
+            // Real-time validation untuk form
+            $('#addMahasiswaForm, #editForm').on('input', '.form-control[required]', function() {
+                if (this.value.trim()) {
+                    $(this).removeClass('is-invalid');
+                } else {
+                    $(this).addClass('is-invalid');
+                }
+            });
+            
+            // Format input angkatan
+            $('input[name="angkatan"]').on('blur', function() {
+                const year = parseInt(this.value);
+                if (year < 2000) this.value = 2000;
+                if (year > 2030) this.value = 2030;
             });
         });
     </script>

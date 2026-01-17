@@ -374,4 +374,16 @@ document.addEventListener('DOMContentLoaded', function() {
             usernameInput.focus();
         }, 300);
     }
+    
+    // Add hover effect to logo images
+    const logoImages = document.querySelectorAll('.logo-img, .program-img');
+    logoImages.forEach(img => {
+        img.addEventListener('mouseenter', function() {
+            this.classList.add('animate__animated', 'animate__pulse');
+        });
+        
+        img.addEventListener('mouseleave', function() {
+            this.classList.remove('animate__animated', 'animate__pulse');
+        });
+    });
 });

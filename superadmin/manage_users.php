@@ -80,7 +80,7 @@ $result = mysqli_query($koneksi, $query);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kelola User - SIPEMBAR</title>
+    <title>Kelola Teknisi - SIPEMBAR</title>
     
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -127,7 +127,7 @@ $result = mysqli_query($koneksi, $query);
                 <li class="nav-item active">
                     <a class="nav-link" href="manage_users.php">
                         <i class="fas fa-users-cog"></i>
-                        <span>Kelola User</span>
+                        <span>Kelola Teknisi</span>
                     </a>
                 </li>
                 <li class="nav-item">
@@ -206,13 +206,13 @@ $result = mysqli_query($koneksi, $query);
                 <div class="d-flex justify-content-between align-items-center">
                     <div class="page-title">
                         <h4 class="mb-0">
-                            <i class="fas fa-users-cog me-2"></i>Kelola User
+                            <i class="fas fa-users-cog me-2"></i>Kelola Teknisi
                         </h4>
                         <small class="text-muted">Kelola semua pengguna sistem</small>
                     </div>
                     <div class="topbar-right">
                         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
-                            <i class="fas fa-user-plus me-1"></i>Tambah User
+                            <i class="fas fa-user-plus me-1"></i>Tambah Teknisi
                         </button>
                     </div>
                 </div>
@@ -232,7 +232,7 @@ $result = mysqli_query($koneksi, $query);
                 
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-list me-2"></i>Daftar User</h5>
+                        <h5 class="mb-0"><i class="fas fa-list me-2"></i>Daftar Teknisi</h5>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
@@ -358,7 +358,7 @@ $result = mysqli_query($koneksi, $query);
             <div class="modal-content">
                 <form method="POST" action="">
                     <div class="modal-header">
-                        <h5 class="modal-title">Tambah User Baru</h5>
+                        <h5 class="modal-title">Tambah Teknisi Baru</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
@@ -389,7 +389,7 @@ $result = mysqli_query($koneksi, $query);
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="add_user" class="btn btn-primary">Tambah User</button>
+                        <button type="submit" name="add_user" class="btn btn-primary">Tambah Teknisi</button>
                     </div>
                 </form>
             </div>

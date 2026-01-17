@@ -253,7 +253,7 @@ $kategori_result = mysqli_query($koneksi, $kategori_query);
 </head>
 <body>
     <!-- Sidebar -->
-    <?php include 'includes/sidebar.php'; ?>
+    <?php include 'sidebar.php'; ?>
     
     <!-- Main Content -->
     <div class="main-content">

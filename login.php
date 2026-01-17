@@ -93,9 +93,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <div class="col-md-4 text-center text-md-start">
                     <div class="logo-container">
                         <div class="logo-wrapper">
-                            <i class="fas fa-university logo-icon"></i>
+                            <?php
+                            $logo_pnp = "assets/images/logo kampus.png";
+                            if (file_exists($logo_pnp)):
+                            ?>
+                                <img src="<?php echo $logo_pnp; ?>" alt="Logo Politeknik Negeri Padang" class="logo-img">
+                            <?php else: ?>
+                                <div class="logo-fallback">
+                                    <i class="fas fa-university"></i>
+                                </div>
+                            <?php endif; ?>
                             <div class="logo-text">
-                                <h5 class="mb-0 fw-bold">UNIVERSITAS</h5>
+                                <h5 class="mb-0 fw-bold">Politeknik Negeri Padang</h5>
                                 <small class="text-muted">Teknologi Informasi</small>
                             </div>
                         </div>
@@ -104,7 +113,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <div class="col-md-4 text-center">
                     <div class="system-title">
                         <h1 class="display-6 fw-bold text-primary">
-                            <i class="fas fa-boxes me-2"></i>SIPEMBAR
+                            <?php
+                            $logo_sipembar = "assets/images/logo-sipembar.png";
+                            if (file_exists($logo_sipembar)):
+                            ?>
+                                <img src="<?php echo $logo_sipembar; ?>" alt="SIPEMBAR Logo" class="system-logo me-2">
+                            <?php else: ?>
+                                <i class="fas fa-boxes me-2"></i>
+                            <?php endif; ?>
+                            SIPEMBAR
                         </h1>
                         <p class="text-muted mb-0">Sistem Peminjaman Barang</p>
                     </div>
@@ -113,10 +130,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div class="program-container">
                         <div class="program-wrapper">
                             <div class="program-text text-end">
-                                <h5 class="mb-0 fw-bold">INFORMATIKA</h5>
+                                <h5 class="mb-0 fw-bold">Sistem Informasi</h5>
                                 <small class="text-muted">Program Studi</small>
                             </div>
-                            <i class="fas fa-laptop-code program-icon"></i>
+                            <?php
+                            $logo_informatika = "assets/images/logo SI.png";
+                            if (file_exists($logo_informatika)):
+                            ?>
+                                <img src="<?php echo $logo_informatika; ?>" alt="Logo Informatika" class="program-img">
+                            <?php else: ?>
+                                <div class="program-fallback">
+                                    <i class="fas fa-laptop-code"></i>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
