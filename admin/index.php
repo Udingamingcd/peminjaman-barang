@@ -23,11 +23,13 @@ $query_stats = "SELECT
 $result_stats = mysqli_query($koneksi, $query_stats);
 $stats = mysqli_fetch_assoc($result_stats);
 
-// Ambil data peminjaman terbaru
-$query_peminjaman = "SELECT p.*, m.nama as nama_mahasiswa, b.nama_barang, b.kode_barang 
+// Ambil data peminjaman terbaru dengan informasi teknisi
+$query_peminjaman = "SELECT p.*, m.nama as nama_mahasiswa, m.nim, b.nama_barang, b.kode_barang, 
+                     u.nama_lengkap as admin_name, u.username as admin_username
                      FROM peminjaman p
                      JOIN mahasiswa m ON p.mahasiswa_id = m.id
                      JOIN barang b ON p.barang_id = b.id
+                     JOIN users u ON p.admin_id = u.id
                      ORDER BY p.created_at DESC LIMIT 10";
 $result_peminjaman = mysqli_query($koneksi, $query_peminjaman);
 ?>
@@ -277,14 +279,38 @@ $result_peminjaman = mysqli_query($koneksi, $query_peminjaman);
                                                 <th>Tanggal Pinjam</th>
                                                 <th>Tanggal Kembali</th>
                                                 <th>Status</th>
+                                                <th>Di Proses Oleh Teknisi</th>
                                                 <th>Aksi</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <?php while($row = mysqli_fetch_assoc($result_peminjaman)): ?>
+                                            <?php while($row = mysqli_fetch_assoc($result_peminjaman)): 
+                                                // Data untuk modal
+                                                $modal_data = [
+                                                    'id' => $row['id'],
+                                                    'kode_peminjaman' => $row['kode_peminjaman'],
+                                                    'nama_mahasiswa' => $row['nama_mahasiswa'],
+                                                    'nim' => $row['nim'],
+                                                    'nama_barang' => $row['nama_barang'],
+                                                    'kode_barang' => $row['kode_barang'],
+                                                    'tanggal_pinjam' => $row['tanggal_pinjam'],
+                                                    'tanggal_kembali' => $row['tanggal_kembali'],
+                                                    'batas_kembali' => $row['batas_kembali'],
+                                                    'status' => $row['status'],
+                                                    'admin_name' => $row['admin_name'],
+                                                    'admin_username' => $row['admin_username'],
+                                                    'keterangan' => $row['keterangan'],
+                                                    'denda' => $row['denda']
+                                                ];
+                                            ?>
                                             <tr>
                                                 <td><span class="badge bg-secondary"><?php echo $row['kode_peminjaman']; ?></span></td>
-                                                <td><?php echo htmlspecialchars($row['nama_mahasiswa']); ?></td>
+                                                <td>
+                                                    <div>
+                                                        <small class="text-muted d-block">NIM: <?php echo $row['nim']; ?></small>
+                                                        <?php echo htmlspecialchars($row['nama_mahasiswa']); ?>
+                                                    </div>
+                                                </td>
                                                 <td>
                                                     <div class="d-flex align-items-center">
                                                         <div class="me-2">
@@ -318,10 +344,22 @@ $result_peminjaman = mysqli_query($koneksi, $query_peminjaman);
                                                     </span>
                                                 </td>
                                                 <td>
+                                                    <div class="d-flex align-items-center">
+                                                        <div class="me-2">
+                                                            <i class="fas fa-user-tie text-info"></i>
+                                                        </div>
+                                                        <div>
+                                                            <small class="text-muted d-block">Username: <?php echo $row['admin_username']; ?></small>
+                                                            <?php echo htmlspecialchars($row['admin_name']); ?>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td>
                                                     <button class="btn btn-sm btn-outline-primary view-detail" 
                                                             data-id="<?php echo $row['id']; ?>"
+                                                            data-peminjaman='<?php echo htmlspecialchars(json_encode($modal_data), ENT_QUOTES, 'UTF-8'); ?>'
                                                             data-bs-toggle="tooltip" 
-                                                            title="Lihat Detail">
+                                                            title="Lihat Detail Lengkap">
                                                         <i class="fas fa-eye"></i>
                                                     </button>
                                                 </td>
@@ -373,6 +411,29 @@ $result_peminjaman = mysqli_query($koneksi, $query_peminjaman);
                 </div>
             </div>
         </footer>
+    </div>
+    
+    <!-- Detail Peminjaman Modal -->
+    <div class="modal fade" id="detailPeminjamanModal" tabindex="-1" aria-labelledby="detailPeminjamanModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="detailPeminjamanModalLabel">Detail Peminjaman</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="detailContent">
+                        <!-- Konten akan diisi oleh JavaScript -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                    <button type="button" class="btn btn-primary" id="printDetailBtn">
+                        <i class="fas fa-print me-2"></i>Cetak Detail
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
     
     <!-- Bootstrap JS Bundle with Popper -->

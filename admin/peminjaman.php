@@ -3,6 +3,10 @@
 session_start();
 require_once '../config/koneksi.php';
 
+// Untuk debugging - HAPUS SETELAH PERBAIKAN
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 // Cek apakah user sudah login dan role admin
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
     header("Location: ../login.php");
@@ -16,6 +20,15 @@ $role = $_SESSION['role'];
 
 $message = '';
 $message_type = '';
+
+// Fungsi untuk mengecek error pada query
+function execute_query($koneksi, $query, $error_message = "") {
+    $result = mysqli_query($koneksi, $query);
+    if (!$result) {
+        throw new Exception(($error_message ? $error_message . ": " : "") . mysqli_error($koneksi));
+    }
+    return $result;
+}
 
 // Proses tambah peminjaman
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_peminjaman'])) {
@@ -50,66 +63,129 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_peminjaman'])) {
     $result_stok = mysqli_query($koneksi, $check_stok);
     $barang = mysqli_fetch_assoc($result_stok);
     
-    if ($barang['stok'] < 1) {
+    if (!$barang) {
+        $message = "Barang tidak ditemukan!";
+        $message_type = "danger";
+    } elseif ($barang['stok'] < 1) {
         $message = "Stok barang tidak tersedia!";
         $message_type = "danger";
     } elseif ($barang['status'] != 'tersedia') {
         $message = "Barang tidak tersedia untuk dipinjam!";
         $message_type = "danger";
     } else {
-        // Insert peminjaman
-        $insert_query = "INSERT INTO peminjaman 
-                        (kode_peminjaman, mahasiswa_id, barang_id, admin_id, tanggal_pinjam, batas_kembali, foto_bukti_pinjam, keterangan) 
-                        VALUES ('$kode_peminjaman', '$mahasiswa_id', '$barang_id', '$user_id', '$tanggal_pinjam', '$batas_kembali', '$foto_bukti_pinjam', '$keterangan')";
+        // Mulai transaksi
+        mysqli_begin_transaction($koneksi);
         
-        if (mysqli_query($koneksi, $insert_query)) {
+        try {
+            // Insert peminjaman
+            $insert_query = "INSERT INTO peminjaman 
+                            (kode_peminjaman, mahasiswa_id, barang_id, admin_id, tanggal_pinjam, batas_kembali, foto_bukti_pinjam, keterangan) 
+                            VALUES ('$kode_peminjaman', '$mahasiswa_id', '$barang_id', '$user_id', '$tanggal_pinjam', '$batas_kembali', '$foto_bukti_pinjam', '$keterangan')";
+            
+            if (!mysqli_query($koneksi, $insert_query)) {
+                throw new Exception("Gagal menambahkan peminjaman: " . mysqli_error($koneksi));
+            }
+            
+            $peminjaman_id = mysqli_insert_id($koneksi);
+            
+            if (!$peminjaman_id) {
+                throw new Exception("Gagal mendapatkan ID peminjaman");
+            }
+            
             // Update status barang
             $update_barang = "UPDATE barang SET status = 'sedang_dipinjam', stok = stok - 1 WHERE id = '$barang_id'";
-            mysqli_query($koneksi, $update_barang);
+            if (!mysqli_query($koneksi, $update_barang)) {
+                throw new Exception("Gagal update status barang: " . mysqli_error($koneksi));
+            }
             
             // Tambah riwayat status
-            $peminjaman_id = mysqli_insert_id($koneksi);
             $riwayat_query = "INSERT INTO riwayat_status (peminjaman_id, status_sebelum, status_sesudah, admin_id, keterangan) 
-                             VALUES ('$peminjaman_id', 'tersedia', 'dipinjam', '$user_id', 'Peminjaman baru')";
-            mysqli_query($koneksi, $riwayat_query);
+                             VALUES ('$peminjaman_id', 'tersedia', 'dipinjam', '$user_id', 'Peminjaman baru: $kode_peminjaman')";
+            
+            if (!mysqli_query($koneksi, $riwayat_query)) {
+                throw new Exception("Gagal menambahkan riwayat status: " . mysqli_error($koneksi));
+            }
+            
+            mysqli_commit($koneksi);
             
             $message = "Peminjaman berhasil ditambahkan! Kode: $kode_peminjaman";
             $message_type = "success";
-            log_activity($user_id, 'add_peminjaman', "Menambahkan peminjaman $kode_peminjaman");
-        } else {
-            $message = "Gagal menambahkan peminjaman: " . mysqli_error($koneksi);
+            
+            // Log activity
+            if (function_exists('log_activity')) {
+                log_activity($user_id, 'add_peminjaman', "Menambahkan peminjaman $kode_peminjaman");
+            }
+            
+        } catch (Exception $e) {
+            mysqli_rollback($koneksi);
+            
+            // Hapus file yang sudah diupload jika gagal
+            if ($foto_bukti_pinjam && file_exists('../assets/uploads/bukti_pinjam/' . $foto_bukti_pinjam)) {
+                unlink('../assets/uploads/bukti_pinjam/' . $foto_bukti_pinjam);
+            }
+            
+            $message = $e->getMessage();
             $message_type = "danger";
         }
     }
 }
 
-// Proses pengembalian (akan dipindah ke pengembalian.php nanti)
+// Proses pengembalian
 if (isset($_GET['kembali'])) {
     $id = clean_input($_GET['kembali']);
     
-    // Update status peminjaman
-    $update_query = "UPDATE peminjaman SET status = 'dikembalikan', tanggal_kembali = CURDATE() WHERE id = '$id'";
+    // Validasi apakah ID peminjaman ada
+    $check_query = "SELECT id, barang_id, kode_peminjaman FROM peminjaman WHERE id = '$id'";
+    $check_result = mysqli_query($koneksi, $check_query);
     
-    if (mysqli_query($koneksi, $update_query)) {
-        // Update status barang
-        $peminjaman_query = "SELECT barang_id FROM peminjaman WHERE id = '$id'";
-        $result_peminjaman = mysqli_query($koneksi, $peminjaman_query);
-        $peminjaman = mysqli_fetch_assoc($result_peminjaman);
-        
-        $update_barang = "UPDATE barang SET status = 'tersedia', stok = stok + 1 WHERE id = '{$peminjaman['barang_id']}'";
-        mysqli_query($koneksi, $update_barang);
-        
-        // Tambah riwayat status
-        $riwayat_query = "INSERT INTO riwayat_status (peminjaman_id, status_sebelum, status_sesudah, admin_id, keterangan) 
-                         VALUES ('$id', 'dipinjam', 'dikembalikan', '$user_id', 'Pengembalian barang')";
-        mysqli_query($koneksi, $riwayat_query);
-        
-        $message = "Pengembalian berhasil dicatat!";
-        $message_type = "success";
-        log_activity($user_id, 'return_peminjaman', "Mencatat pengembalian peminjaman ID: $id");
-    } else {
-        $message = "Gagal mencatat pengembalian: " . mysqli_error($koneksi);
+    if (mysqli_num_rows($check_result) == 0) {
+        $message = "Data peminjaman tidak ditemukan!";
         $message_type = "danger";
+    } else {
+        $peminjaman_data = mysqli_fetch_assoc($check_result);
+        $barang_id = $peminjaman_data['barang_id'];
+        $kode_peminjaman = $peminjaman_data['kode_peminjaman'];
+        
+        // Mulai transaksi
+        mysqli_begin_transaction($koneksi);
+        
+        try {
+            // Update status peminjaman
+            $update_query = "UPDATE peminjaman SET status = 'dikembalikan', tanggal_kembali = CURDATE() WHERE id = '$id'";
+            
+            if (!mysqli_query($koneksi, $update_query)) {
+                throw new Exception("Gagal update peminjaman: " . mysqli_error($koneksi));
+            }
+            
+            // Update status barang
+            $update_barang = "UPDATE barang SET status = 'tersedia', stok = stok + 1 WHERE id = '$barang_id'";
+            if (!mysqli_query($koneksi, $update_barang)) {
+                throw new Exception("Gagal update barang: " . mysqli_error($koneksi));
+            }
+            
+            // Tambah riwayat status
+            $riwayat_query = "INSERT INTO riwayat_status (peminjaman_id, status_sebelum, status_sesudah, admin_id, keterangan) 
+                             VALUES ('$id', 'dipinjam', 'dikembalikan', '$user_id', 'Pengembalian barang: $kode_peminjaman')";
+            
+            if (!mysqli_query($koneksi, $riwayat_query)) {
+                throw new Exception("Gagal menambahkan riwayat status: " . mysqli_error($koneksi));
+            }
+            
+            mysqli_commit($koneksi);
+            
+            $message = "Pengembalian berhasil dicatat!";
+            $message_type = "success";
+            
+            // Log activity
+            if (function_exists('log_activity')) {
+                log_activity($user_id, 'return_peminjaman', "Mencatat pengembalian peminjaman ID: $id");
+            }
+            
+        } catch (Exception $e) {
+            mysqli_rollback($koneksi);
+            $message = $e->getMessage();
+            $message_type = "danger";
+        }
     }
 }
 
@@ -117,23 +193,57 @@ if (isset($_GET['kembali'])) {
 if (isset($_GET['hilang'])) {
     $id = clean_input($_GET['hilang']);
     
-    $update_query = "UPDATE peminjaman SET status = 'hilang' WHERE id = '$id'";
+    // Validasi apakah ID peminjaman ada
+    $check_query = "SELECT id, barang_id, kode_peminjaman FROM peminjaman WHERE id = '$id'";
+    $check_result = mysqli_query($koneksi, $check_query);
     
-    if (mysqli_query($koneksi, $update_query)) {
-        // Update status barang
-        $peminjaman_query = "SELECT barang_id FROM peminjaman WHERE id = '$id'";
-        $result_peminjaman = mysqli_query($koneksi, $peminjaman_query);
-        $peminjaman = mysqli_fetch_assoc($result_peminjaman);
-        
-        $update_barang = "UPDATE barang SET status = 'hilang' WHERE id = '{$peminjaman['barang_id']}'";
-        mysqli_query($koneksi, $update_barang);
-        
-        $message = "Status peminjaman diubah menjadi hilang!";
-        $message_type = "warning";
-        log_activity($user_id, 'lost_peminjaman', "Mengubah status peminjaman ID: $id menjadi hilang");
-    } else {
-        $message = "Gagal mengubah status: " . mysqli_error($koneksi);
+    if (mysqli_num_rows($check_result) == 0) {
+        $message = "Data peminjaman tidak ditemukan!";
         $message_type = "danger";
+    } else {
+        $peminjaman_data = mysqli_fetch_assoc($check_result);
+        $barang_id = $peminjaman_data['barang_id'];
+        $kode_peminjaman = $peminjaman_data['kode_peminjaman'];
+        
+        // Mulai transaksi
+        mysqli_begin_transaction($koneksi);
+        
+        try {
+            $update_query = "UPDATE peminjaman SET status = 'hilang' WHERE id = '$id'";
+            
+            if (!mysqli_query($koneksi, $update_query)) {
+                throw new Exception("Gagal update status peminjaman: " . mysqli_error($koneksi));
+            }
+            
+            // Update status barang
+            $update_barang = "UPDATE barang SET status = 'hilang' WHERE id = '$barang_id'";
+            if (!mysqli_query($koneksi, $update_barang)) {
+                throw new Exception("Gagal update status barang: " . mysqli_error($koneksi));
+            }
+            
+            // Tambah riwayat status
+            $riwayat_query = "INSERT INTO riwayat_status (peminjaman_id, status_sebelum, status_sesudah, admin_id, keterangan) 
+                             VALUES ('$id', 'dipinjam', 'hilang', '$user_id', 'Barang hilang: $kode_peminjaman')";
+            
+            if (!mysqli_query($koneksi, $riwayat_query)) {
+                throw new Exception("Gagal menambahkan riwayat status: " . mysqli_error($koneksi));
+            }
+            
+            mysqli_commit($koneksi);
+            
+            $message = "Status peminjaman diubah menjadi hilang!";
+            $message_type = "warning";
+            
+            // Log activity
+            if (function_exists('log_activity')) {
+                log_activity($user_id, 'lost_peminjaman', "Mengubah status peminjaman ID: $id menjadi hilang");
+            }
+            
+        } catch (Exception $e) {
+            mysqli_rollback($koneksi);
+            $message = $e->getMessage();
+            $message_type = "danger";
+        }
     }
 }
 
@@ -181,7 +291,16 @@ $query = "SELECT p.*, m.nama as nama_mahasiswa, m.nim, b.nama_barang, b.kode_bar
 $result = mysqli_query($koneksi, $query);
 
 // Simpan data untuk modal (duplikat result)
-$modal_result = mysqli_query($koneksi, $query);
+$modal_query = "SELECT p.*, m.nama as nama_mahasiswa, m.nim, b.nama_barang, b.kode_barang,
+               u.nama_lengkap as admin_name
+               FROM peminjaman p 
+               JOIN mahasiswa m ON p.mahasiswa_id = m.id
+               JOIN barang b ON p.barang_id = b.id
+               JOIN users u ON p.admin_id = u.id
+               $where 
+               ORDER BY p.created_at DESC 
+               LIMIT $limit OFFSET $offset";
+$modal_result = mysqli_query($koneksi, $modal_query);
 
 // Ambil statistik
 $stats_query = "SELECT 
@@ -301,6 +420,13 @@ $barang_result = mysqli_query($koneksi, $barang_query);
             transform: translate(0, 0);
             opacity: 1;
         }
+        
+        .table-danger {
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+        .table-warning {
+            background-color: rgba(255, 193, 7, 0.1);
+        }
     </style>
 </head>
 <body>
@@ -333,7 +459,7 @@ $barang_result = mysqli_query($koneksi, $barang_query);
             <div class="container-fluid">
                 <?php if ($message): ?>
                     <div class="alert alert-<?php echo $message_type; ?> alert-dismissible fade show" role="alert">
-                        <i class="fas fa-<?php echo $message_type == 'success' ? 'check-circle' : 'exclamation-circle'; ?> me-2"></i>
+                        <i class="fas fa-<?php echo $message_type == 'success' ? 'check-circle' : ($message_type == 'warning' ? 'exclamation-triangle' : 'exclamation-circle'); ?> me-2"></i>
                         <?php echo $message; ?>
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
@@ -440,21 +566,22 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                                 </thead>
                                 <tbody>
                                     <?php 
-                                    while($row = mysqli_fetch_assoc($result)): 
-                                        // Cek apakah terlambat
-                                        $is_overdue = false;
-                                        $is_soon_due = false;
-                                        if ($row['status'] == 'dipinjam' && $row['batas_kembali']) {
-                                            $today = new DateTime();
-                                            $due_date = new DateTime($row['batas_kembali']);
-                                            $interval = $today->diff($due_date);
-                                            
-                                            if ($today > $due_date) {
-                                                $is_overdue = true;
-                                            } elseif ($interval->days <= 2 && $interval->invert == 0) {
-                                                $is_soon_due = true;
+                                    if ($result && mysqli_num_rows($result) > 0) {
+                                        while($row = mysqli_fetch_assoc($result)): 
+                                            // Cek apakah terlambat
+                                            $is_overdue = false;
+                                            $is_soon_due = false;
+                                            if ($row['status'] == 'dipinjam' && $row['batas_kembali']) {
+                                                $today = new DateTime();
+                                                $due_date = new DateTime($row['batas_kembali']);
+                                                $interval = $today->diff($due_date);
+                                                
+                                                if ($today > $due_date) {
+                                                    $is_overdue = true;
+                                                } elseif ($interval->days <= 2 && $interval->invert == 0) {
+                                                    $is_soon_due = true;
+                                                }
                                             }
-                                        }
                                     ?>
                                     <tr class="<?php echo $is_overdue ? 'table-danger' : ($is_soon_due ? 'table-warning' : ''); ?>">
                                         <td>
@@ -546,7 +673,11 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                                             </div>
                                         </td>
                                     </tr>
-                                    <?php endwhile; ?>
+                                    <?php endwhile; 
+                                    } else {
+                                        echo '<tr><td colspan="7" class="text-center">Tidak ada data peminjaman</td></tr>';
+                                    }
+                                    ?>
                                 </tbody>
                             </table>
                         </div>
@@ -614,13 +745,14 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                                 <select class="form-select select2-modal" name="mahasiswa_id" id="mahasiswaSelect" required>
                                     <option value="">Pilih Mahasiswa</option>
                                     <?php 
-                                    // Reset pointer result
-                                    mysqli_data_seek($mahasiswa_result, 0);
-                                    while($mahasiswa = mysqli_fetch_assoc($mahasiswa_result)): ?>
+                                    if ($mahasiswa_result && mysqli_num_rows($mahasiswa_result) > 0) {
+                                        mysqli_data_seek($mahasiswa_result, 0);
+                                        while($mahasiswa = mysqli_fetch_assoc($mahasiswa_result)): ?>
                                     <option value="<?php echo $mahasiswa['id']; ?>">
                                         <?php echo $mahasiswa['nim']; ?> - <?php echo htmlspecialchars($mahasiswa['nama']); ?>
                                     </option>
-                                    <?php endwhile; ?>
+                                    <?php endwhile;
+                                    } ?>
                                 </select>
                             </div>
                             <div class="col-md-6 mb-3">
@@ -628,13 +760,14 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                                 <select class="form-select select2-modal" name="barang_id" id="barangSelect" required>
                                     <option value="">Pilih Barang</option>
                                     <?php 
-                                    // Reset pointer result
-                                    mysqli_data_seek($barang_result, 0);
-                                    while($barang = mysqli_fetch_assoc($barang_result)): ?>
+                                    if ($barang_result && mysqli_num_rows($barang_result) > 0) {
+                                        mysqli_data_seek($barang_result, 0);
+                                        while($barang = mysqli_fetch_assoc($barang_result)): ?>
                                     <option value="<?php echo $barang['id']; ?>">
                                         <?php echo $barang['kode_barang']; ?> - <?php echo htmlspecialchars($barang['nama_barang']); ?>
                                     </option>
-                                    <?php endwhile; ?>
+                                    <?php endwhile;
+                                    } ?>
                                 </select>
                             </div>
                         </div>
@@ -653,7 +786,7 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                         <div class="mb-3">
                             <label class="form-label">Foto Bukti Peminjaman <span class="text-danger">*</span></label>
                             <input type="file" class="form-control" name="foto_bukti_pinjam" accept="image/*" required>
-                            <small class="text-muted">Foto bukti serah terima barang</small>
+                            <small class="text-muted">Foto bukti serah terima barang (jpg, jpeg, png)</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Keterangan</label>
@@ -672,14 +805,14 @@ $barang_result = mysqli_query($koneksi, $barang_query);
     
     <!-- Modals for detail and perpanjang (generated dynamically) -->
     <?php 
-    // Reset pointer untuk modal
-    mysqli_data_seek($modal_result, 0);
-    while($row = mysqli_fetch_assoc($modal_result)):
-        $status_class = '';
-        if($row['status'] == 'dipinjam') $status_class = 'warning';
-        if($row['status'] == 'dikembalikan') $status_class = 'success';
-        if($row['status'] == 'hilang') $status_class = 'danger';
-        if($row['status'] == 'terlambat') $status_class = 'danger';
+    if ($modal_result && mysqli_num_rows($modal_result) > 0) {
+        mysqli_data_seek($modal_result, 0);
+        while($row = mysqli_fetch_assoc($modal_result)):
+            $status_class = '';
+            if($row['status'] == 'dipinjam') $status_class = 'warning';
+            if($row['status'] == 'dikembalikan') $status_class = 'success';
+            if($row['status'] == 'hilang') $status_class = 'danger';
+            if($row['status'] == 'terlambat') $status_class = 'danger';
     ?>
     
     <!-- Detail Modal -->
@@ -772,7 +905,8 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                                              WHERE peminjaman_id = '{$row['id']}' 
                                              ORDER BY created_at DESC";
                             $riwayat_result = mysqli_query($koneksi, $riwayat_query);
-                            while($riwayat = mysqli_fetch_assoc($riwayat_result)):
+                            if ($riwayat_result && mysqli_num_rows($riwayat_result) > 0) {
+                                while($riwayat = mysqli_fetch_assoc($riwayat_result)):
                             ?>
                             <div class="timeline-item">
                                 <div class="timeline-dot"></div>
@@ -787,7 +921,11 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                                     </small>
                                 </div>
                             </div>
-                            <?php endwhile; ?>
+                            <?php endwhile;
+                            } else {
+                                echo '<p class="text-muted">Belum ada riwayat status</p>';
+                            }
+                            ?>
                         </div>
                     </div>
                 </div>
@@ -821,7 +959,7 @@ $barang_result = mysqli_query($koneksi, $barang_query);
                         <div class="mb-3">
                             <label class="form-label">Batas Kembali Baru</label>
                             <input type="date" class="form-control" name="batas_kembali_baru" 
-                                   min="<?php echo date('Y-m-d'); ?>" required>
+                                   min="<?php echo date('Y-m-d', strtotime($row['batas_kembali'])); ?>" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Keterangan Perpanjangan</label>
@@ -838,7 +976,8 @@ $barang_result = mysqli_query($koneksi, $barang_query);
     </div>
     <?php endif; ?>
     
-    <?php endwhile; ?>
+    <?php endwhile;
+    } ?>
     
     <!-- Bootstrap JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
@@ -950,6 +1089,14 @@ $barang_result = mysqli_query($koneksi, $barang_query);
             if (new Date(batasKembali) <= new Date(tanggalPinjam)) {
                 e.preventDefault();
                 alert('Batas kembali harus setelah tanggal pinjam!');
+                return false;
+            }
+            
+            // Validasi ekstensi file
+            var allowedExtensions = /(\.jpg|\.jpeg|\.png)$/i;
+            if (!allowedExtensions.exec(foto)) {
+                e.preventDefault();
+                alert('Hanya file dengan ekstensi .jpg, .jpeg, atau .png yang diperbolehkan!');
                 return false;
             }
             
