@@ -570,7 +570,7 @@ if (!empty($mahasiswa_ids)) {
                                                 </div>
                                                 <div>
                                                     <h6 class="mb-0"><?php echo htmlspecialchars($row['nama']); ?></h6>
-                                                    <small class="text-muted"><?php echo htmlspecialchars($row['email']); ?></small>
+                                                    <small class="text-muted"><?php echo htmlspecialchars($row['nama'] ?? ''); ?></small>
                                                 </div>
                                             </div>
                                         </td>
@@ -583,7 +583,7 @@ if (!empty($mahasiswa_ids)) {
                                                     <i class="fas fa-phone me-2"></i><?php echo $row['no_hp']; ?>
                                                 </small>
                                                 <small class="text-muted">
-                                                    <i class="fas fa-map-marker-alt me-2"></i><?php echo substr($row['alamat'], 0, 30) . '...'; ?>
+                                                    <i class="fas fa-map-marker-alt me-2"></i><?php echo $row['alamat'] ? substr($row['alamat'], 0, 30) . '...' : ''; ?>
                                                 </small>
                                             </div>
                                         </td>

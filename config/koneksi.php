@@ -37,12 +37,20 @@ date_default_timezone_set('Asia/Jakarta');
 // Function to sanitize input
 function clean_input($data) {
     global $koneksi;
-    if (empty($data)) return '';
+    if ($data === null) {
+        return '';
+    }
+    
     $data = trim($data);
     $data = stripslashes($data);
     $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
     $data = mysqli_real_escape_string($koneksi, $data);
     return $data;
+}
+
+// Function untuk mendapatkan nilai dengan default
+function get_value($value, $default = '') {
+    return $value !== null ? $value : $default;
 }
 
 // Function to log activity
