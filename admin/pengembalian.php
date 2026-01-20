@@ -116,6 +116,15 @@ $query = "SELECT p.*, m.nama as nama_mahasiswa, m.nim, b.nama_barang, b.kode_bar
           ORDER BY p.batas_kembali ASC";
 $result = mysqli_query($koneksi, $query);
 
+// Simpan data peminjaman ke dalam array untuk digunakan di modal
+$peminjaman_list = [];
+while($row = mysqli_fetch_assoc($result)) {
+    $peminjaman_list[] = $row;
+}
+
+// Reset pointer result untuk digunakan lagi di tabel
+mysqli_data_seek($result, 0);
+
 // Ambil statistik
 $stats_query = "SELECT 
     COUNT(*) as total_dipinjam,
@@ -165,6 +174,17 @@ $stats = mysqli_fetch_assoc($stats_result);
             padding: 5px 10px;
             border-radius: 5px;
             font-weight: bold;
+        }
+        .modal-backdrop {
+            z-index: 1040 !important;
+        }
+        .modal {
+            z-index: 1050 !important;
+        }
+        /* Fix untuk modal yang tumpang tindih */
+        .modal.fade.show {
+            display: block !important;
+            background-color: rgba(0,0,0,0.5);
         }
     </style>
 </head>
@@ -252,11 +272,11 @@ $stats = mysqli_fetch_assoc($stats_result);
                     <div class="card-header">
                         <h5 class="mb-0">
                             <i class="fas fa-list me-2"></i>Peminjaman Aktif
-                            <span class="badge bg-warning ms-2"><?php echo mysqli_num_rows($result); ?> Data</span>
+                            <span class="badge bg-warning ms-2"><?php echo count($peminjaman_list); ?> Data</span>
                         </h5>
                     </div>
                     <div class="card-body">
-                        <?php if (mysqli_num_rows($result) > 0): ?>
+                        <?php if (count($peminjaman_list) > 0): ?>
                         <div class="table-responsive">
                             <table class="table table-hover">
                                 <thead>
@@ -271,7 +291,7 @@ $stats = mysqli_fetch_assoc($stats_result);
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php while($row = mysqli_fetch_assoc($result)): 
+                                    <?php foreach($peminjaman_list as $row): 
                                         $is_overdue = $row['keterlambatan'] > 0;
                                         $is_soon_due = $row['keterlambatan'] <= 2 && $row['keterlambatan'] >= 0;
                                         $card_class = $is_overdue ? 'overdue-card' : ($is_soon_due ? 'soon-due-card' : 'normal-card');
@@ -311,97 +331,20 @@ $stats = mysqli_fetch_assoc($stats_result);
                                             <span class="badge bg-warning">Sedang Dipinjam</span>
                                         </td>
                                         <td>
-                                            <button type="button" class="btn btn-sm btn-success"
-                                                    data-bs-toggle="modal" data-bs-target="#returnModal<?php echo $row['id']; ?>">
+                                            <button type="button" class="btn btn-sm btn-success process-return-btn"
+                                                    data-id="<?php echo $row['id']; ?>"
+                                                    data-kode="<?php echo htmlspecialchars($row['kode_peminjaman']); ?>"
+                                                    data-mahasiswa="<?php echo htmlspecialchars($row['nama_mahasiswa']); ?> (<?php echo $row['nim']; ?>)"
+                                                    data-barang="<?php echo htmlspecialchars($row['nama_barang']); ?> (<?php echo $row['kode_barang']; ?>)"
+                                                    data-batas="<?php echo $row['batas_kembali']; ?>"
+                                                    data-terlambat="<?php echo $row['keterlambatan']; ?>"
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#returnModal">
                                                 <i class="fas fa-undo me-1"></i>Proses Kembali
                                             </button>
                                         </td>
                                     </tr>
-                                    
-                                    <!-- Return Modal -->
-                                    <div class="modal fade" id="returnModal<?php echo $row['id']; ?>" tabindex="-1">
-                                        <div class="modal-dialog modal-lg">
-                                            <div class="modal-content">
-                                                <form method="POST" action="" enctype="multipart/form-data">
-                                                    <input type="hidden" name="peminjaman_id" value="<?php echo $row['id']; ?>">
-                                                    <div class="modal-header">
-                                                        <h5 class="modal-title">Proses Pengembalian</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                    </div>
-                                                    <div class="modal-body">
-                                                        <div class="row">
-                                                            <div class="col-md-6 mb-3">
-                                                                <label class="form-label">Kode Peminjaman</label>
-                                                                <input type="text" class="form-control" 
-                                                                       value="<?php echo $row['kode_peminjaman']; ?>" disabled>
-                                                            </div>
-                                                            <div class="col-md-6 mb-3">
-                                                                <label class="form-label">Tanggal Kembali <span class="text-danger">*</span></label>
-                                                                <input type="date" class="form-control" name="tanggal_kembali" 
-                                                                       value="<?php echo date('Y-m-d'); ?>" required>
-                                                            </div>
-                                                        </div>
-                                                        <div class="row">
-                                                            <div class="col-md-6 mb-3">
-                                                                <label class="form-label">Mahasiswa</label>
-                                                                <input type="text" class="form-control" 
-                                                                       value="<?php echo htmlspecialchars($row['nama_mahasiswa']); ?> (<?php echo $row['nim']; ?>)" disabled>
-                                                            </div>
-                                                            <div class="col-md-6 mb-3">
-                                                                <label class="form-label">Barang</label>
-                                                                <input type="text" class="form-control" 
-                                                                       value="<?php echo htmlspecialchars($row['nama_barang']); ?> (<?php echo $row['kode_barang']; ?>)" disabled>
-                                                            </div>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Status Barang <span class="text-danger">*</span></label>
-                                                            <select class="form-select" name="status_kembali" required>
-                                                                <option value="dikembalikan">Dikembalikan (Baik)</option>
-                                                                <option value="rusak">Dikembalikan (Rusak)</option>
-                                                                <option value="hilang">Hilang</option>
-                                                                <option value="terlambat">Terlambat</option>
-                                                            </select>
-                                                        </div>
-                                                        
-                                                        <?php if ($row['keterlambatan'] > 0): 
-                                                            $denda_per_hari = get_setting('late_fee_per_day') ?: 5000;
-                                                            $total_denda = $row['keterlambatan'] * $denda_per_hari;
-                                                        ?>
-                                                        <div class="alert alert-warning">
-                                                            <i class="fas fa-exclamation-triangle me-2"></i>
-                                                            Peminjaman terlambat <?php echo $row['keterlambatan']; ?> hari.
-                                                            Denda: Rp <?php echo number_format($denda_per_hari); ?> x <?php echo $row['keterlambatan']; ?> = 
-                                                            <strong>Rp <?php echo number_format($total_denda); ?></strong>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Denda (Rp)</label>
-                                                            <input type="number" class="form-control" name="denda" 
-                                                                   value="<?php echo $total_denda; ?>" min="0" step="500">
-                                                        </div>
-                                                        <?php else: ?>
-                                                        <input type="hidden" name="denda" value="0">
-                                                        <?php endif; ?>
-                                                        
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Foto Bukti Pengembalian <span class="text-danger">*</span></label>
-                                                            <input type="file" class="form-control" name="foto_bukti_kembali" accept="image/*" required>
-                                                            <small class="text-muted">Foto bukti serah terima barang kembali</small>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Keterangan</label>
-                                                            <textarea class="form-control" name="keterangan" rows="3" 
-                                                                      placeholder="Catatan kondisi barang, dll."></textarea>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                                                        <button type="submit" name="process_return" class="btn btn-success">Proses Pengembalian</button>
-                                                    </div>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <?php endwhile; ?>
+                                    <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
@@ -518,6 +461,78 @@ $stats = mysqli_fetch_assoc($stats_result);
         </footer>
     </div>
     
+    <!-- Modal Return (Satu Modal untuk Semua) -->
+    <div class="modal fade" id="returnModal" tabindex="-1" aria-labelledby="returnModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <form method="POST" action="" enctype="multipart/form-data" id="returnForm">
+                    <input type="hidden" name="peminjaman_id" id="peminjaman_id" value="">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="returnModalLabel">Proses Pengembalian</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Kode Peminjaman</label>
+                                <input type="text" class="form-control" id="kode_peminjaman" disabled>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Tanggal Kembali <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" name="tanggal_kembali" 
+                                       id="tanggal_kembali" value="<?php echo date('Y-m-d'); ?>" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Mahasiswa</label>
+                                <input type="text" class="form-control" id="mahasiswa_info" disabled>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Barang</label>
+                                <input type="text" class="form-control" id="barang_info" disabled>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status Barang <span class="text-danger">*</span></label>
+                            <select class="form-select" name="status_kembali" id="status_kembali" required>
+                                <option value="dikembalikan">Dikembalikan (Baik)</option>
+                                <option value="rusak">Dikembalikan (Rusak)</option>
+                                <option value="hilang">Hilang</option>
+                                <option value="terlambat">Terlambat</option>
+                            </select>
+                        </div>
+                        
+                        <div id="denda_section" class="mb-3" style="display: none;">
+                            <div class="alert alert-warning" id="denda_alert">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <span id="denda_message"></span>
+                            </div>
+                            <label class="form-label">Denda (Rp)</label>
+                            <input type="number" class="form-control" name="denda" 
+                                   id="denda_input" value="0" min="0" step="500">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Foto Bukti Pengembalian <span class="text-danger">*</span></label>
+                            <input type="file" class="form-control" name="foto_bukti_kembali" accept="image/*" required>
+                            <small class="text-muted">Foto bukti serah terima barang kembali</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Keterangan</label>
+                            <textarea class="form-control" name="keterangan" rows="3" 
+                                      placeholder="Catatan kondisi barang, dll."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" name="process_return" class="btn btn-success">Proses Pengembalian</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
     <!-- Bootstrap JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     
@@ -525,75 +540,100 @@ $stats = mysqli_fetch_assoc($stats_result);
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     
     <script>
-        // Auto calculate denda
-        $('select[name="status_kembali"]').on('change', function() {
-            var status = $(this).val();
-            var modal = $(this).closest('.modal');
-            
-            if (status === 'hilang') {
-                // Tampilkan form penggantian barang
-                if (!modal.find('#penggantianForm').length) {
-                    var penggantianForm = `
-                        <div class="alert alert-danger" id="penggantianForm">
-                            <h6><i class="fas fa-exclamation-triangle me-2"></i>Penggantian Barang Hilang</h6>
-                            <div class="mb-2">
-                                <label class="form-label">Keterangan Kehilangan</label>
-                                <textarea class="form-control" name="keterangan_hilang" rows="2" required></textarea>
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label">Tanggal Penggantian</label>
-                                <input type="date" class="form-control" name="tanggal_penggantian" required>
-                            </div>
-                        </div>
-                    `;
-                    modal.find('.modal-body').append(penggantianForm);
+        $(document).ready(function() {
+            // Ketika tombol proses kembali diklik
+            $('.process-return-btn').on('click', function() {
+                const peminjamanId = $(this).data('id');
+                const kode = $(this).data('kode');
+                const mahasiswa = $(this).data('mahasiswa');
+                const barang = $(this).data('barang');
+                const batas = $(this).data('batas');
+                const terlambat = parseInt($(this).data('terlambat'));
+                
+                // Isi data ke modal
+                $('#peminjaman_id').val(peminjamanId);
+                $('#kode_peminjaman').val(kode);
+                $('#mahasiswa_info').val(mahasiswa);
+                $('#barang_info').val(barang);
+                
+                // Hitung denda jika terlambat
+                if (terlambat > 0) {
+                    const dendaPerHari = 5000; // Default, bisa diganti dengan setting
+                    const totalDenda = terlambat * dendaPerHari;
+                    
+                    // Tampilkan section denda
+                    $('#denda_section').show();
+                    $('#denda_message').text('Peminjaman terlambat ' + terlambat + ' hari. Denda: Rp ' + dendaPerHari.toLocaleString() + ' x ' + terlambat + ' = Rp ' + totalDenda.toLocaleString());
+                    $('#denda_input').val(totalDenda);
+                    
+                    // Set status ke terlambat
+                    $('#status_kembali').val('terlambat');
+                } else {
+                    $('#denda_section').hide();
+                    $('#denda_input').val(0);
+                    $('#status_kembali').val('dikembalikan');
                 }
-            } else {
-                modal.find('#penggantianForm').remove();
-            }
-        });
-        
-        // Form validation
-        $('form').on('submit', function(e) {
-            var status = $(this).find('select[name="status_kembali"]').val();
-            var foto = $(this).find('input[name="foto_bukti_kembali"]').val();
+                
+                // Reset form file input
+                $('#returnForm')[0].reset();
+                $('#tanggal_kembali').val('<?php echo date('Y-m-d'); ?>');
+            });
             
-            if (!foto) {
-                e.preventDefault();
-                alert('Foto bukti pengembalian wajib diisi!');
-                return false;
-            }
+            // Reset modal ketika ditutup
+            $('#returnModal').on('hidden.bs.modal', function() {
+                $('#denda_section').hide();
+                $('#denda_input').val(0);
+                $('#status_kembali').val('dikembalikan');
+            });
             
-            if (status === 'hilang') {
-                var keterangan = $(this).find('textarea[name="keterangan_hilang"]').val();
-                if (!keterangan) {
+            // Handle perubahan status
+            $('#status_kembali').on('change', function() {
+                const status = $(this).val();
+                
+                if (status === 'hilang') {
+                    // Tambahkan form tambahan untuk barang hilang
+                    if (!$('#hilangForm').length) {
+                        const hilangForm = `
+                            <div class="alert alert-danger" id="hilangForm">
+                                <h6><i class="fas fa-exclamation-triangle me-2"></i>Penggantian Barang Hilang</h6>
+                                <div class="mb-2">
+                                    <label class="form-label">Keterangan Kehilangan</label>
+                                    <textarea class="form-control" name="keterangan_hilang" rows="2" required></textarea>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">Tanggal Penggantian</label>
+                                    <input type="date" class="form-control" name="tanggal_penggantian" required>
+                                </div>
+                            </div>
+                        `;
+                        $(hilangForm).insertAfter('#denda_section');
+                    }
+                } else {
+                    $('#hilangForm').remove();
+                }
+            });
+            
+            // Form validation
+            $('#returnForm').on('submit', function(e) {
+                const status = $('#status_kembali').val();
+                const foto = $('input[name="foto_bukti_kembali"]').val();
+                
+                if (!foto) {
                     e.preventDefault();
-                    alert('Keterangan kehilangan wajib diisi!');
+                    alert('Foto bukti pengembalian wajib diisi!');
                     return false;
                 }
-            }
-        });
-        
-        // Auto set denda for overdue returns
-        $(document).ready(function() {
-            $('.modal').on('show.bs.modal', function() {
-                var dendaInput = $(this).find('input[name="denda"]');
-                if (dendaInput.length && !dendaInput.val()) {
-                    // Calculate denda based on keterlambatan
-                    var overdueDays = $(this).find('.alert-warning').text().match(/\d+/);
-                    if (overdueDays) {
-                        var dendaPerHari = 5000; // Default
-                        var totalDenda = overdueDays[0] * dendaPerHari;
-                        dendaInput.val(totalDenda);
+                
+                if (status === 'hilang') {
+                    const keterangan = $('textarea[name="keterangan_hilang"]').val();
+                    if (!keterangan) {
+                        e.preventDefault();
+                        alert('Keterangan kehilangan wajib diisi!');
+                        return false;
                     }
                 }
             });
         });
-        
-        // Print return receipt
-        function printReturnReceipt(id) {
-            window.open('print_pengembalian.php?id=' + id, '_blank');
-        }
     </script>
 </body>
 </html>
